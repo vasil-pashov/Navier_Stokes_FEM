@@ -31,6 +31,10 @@ public:
     /// @param[in] elementIndex The index of the element to be extracted
     /// @param[out] outElement Array of size at least elementSize where node indices for the array will be extracted
     void getElement(const int elementIndex, int* outElement, float* outNodes) const;
+    /// Load mesh written in JSON file format
+    /// @param[in] filePath Path the the mesh file
+    /// @returns Status code: 0 on success
+    int loadJSON(const char* filePath);
 protected:
     /// List containing 2D coordinates for each node in the grid.
     std::vector<float> nodes;
@@ -40,7 +44,13 @@ protected:
     int elementsCount;
     /// Number of nodes which represent a specific element.
     int elementSize;
+    /// The nuber of nodes in the mesh
+    int nodesCount;
 };
+
+inline const int FemGrid2D::getNodesCount() const {
+    return nodesCount;
+}
 
 inline const int FemGrid2D::getElementsCount() const {
     return elementsCount;
