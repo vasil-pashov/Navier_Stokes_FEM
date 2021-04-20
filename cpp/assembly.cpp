@@ -209,7 +209,7 @@ void NavierStokesAssembly::assemblVelocityMassMatrix() {
             }
         }        
     };
-    integrateOverTriangle<p2Size * p2Size>(squareP2, (real*)p2Squared);
+    integrateOverTriangle<p2Size * p2Size>(squareP2, reinterpret_cast<real*>(p2Squared));
 
     // Lambda wich takes advantage of precomputed shape function integral
     const auto localMass = [&p2Squared, p2Size](real* elementNodes, real* localMatrixOut) -> void {
@@ -249,8 +249,8 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
             }
         }
     };
-    real delPSq[delPSize * delPSize] = {};
-    integrateOverTriangle<delPSize * delPSize>(squareDelP, delPSq);
+    real delPSq[delPSize][delPSize] = {};
+    integrateOverTriangle<delPSize * delPSize>(squareDelP, reinterpret_cast<real*>(delPSq));
 
     const auto localStiffness = [&delPSq, pSize](real* elementNodes, real* localMatrixOut) -> void {
         real b[2][2];
@@ -260,12 +260,12 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
         for(int i = 0; i < pSize; ++i) {
             for(int j = 0; j < pSize; ++j) {
                 const int outIndex = linearize2DIndex(pSize, i, j);
-                localMatrixOut[outIndex] = 0;
+                localMatrixOut[outIndex] = real(0);
                 const real sq[4] = {
-                    delPSq[linearize2DIndex(2 * pSize, i, j)],
-                    delPSq[linearize2DIndex(2 * pSize, i, pSize + j)],
-                    delPSq[linearize2DIndex(2 * pSize, pSize + i, j)], 
-                    delPSq[linearize2DIndex(2 * pSize, pSize + i, pSize + j)]
+                    delPSq[i][j],
+                    delPSq[i][pSize + j],
+                    delPSq[pSize + i][j],
+                    delPSq[pSize + i][pSize + j]
                 };
                 for(int k = 0; k < 2; ++k) {
                     // This function takes advantage that in the integral for the local matrix only del(DPSI) depends on xi and eta
