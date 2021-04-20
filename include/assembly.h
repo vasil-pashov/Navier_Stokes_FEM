@@ -40,7 +40,12 @@ private:
     template<typename TLocalF, int localRows, int localCols>
     void assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out);
 
-    void assemblVelocityeMassMatrix();
+    /// Add function to handle assembling the velocity mass matrix. It precomputes the integrals of each pair
+    /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
+    void assemblVelocityMassMatrix();
+
+    /// Add function to handle assembling the velocity mass stiffness. It precomputes the integrals of each pair
+    /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
     void assembleVelocityStiffnessMatrix();
 
     /// Viscosity of the fluid

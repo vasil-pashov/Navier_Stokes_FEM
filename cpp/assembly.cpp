@@ -184,12 +184,20 @@ NavierStokesAssembly::NavierStokesAssembly(FemGrid2D&& grid, const real dt, cons
 }
 
 void NavierStokesAssembly::assemble() {
-    assemblVelocityeMassMatrix();
+    assemblVelocityMassMatrix();
     assembleVelocityStiffnessMatrix();
 }
 
-void NavierStokesAssembly::assemblVelocityeMassMatrix() {
+void NavierStokesAssembly::assemblVelocityMassMatrix() {
+    // Compute the mass matrix. Local mass matrix is of the form Integral(dot(Transpose(PSI(xi, eta)), PSI(xi, eta)) * abs(|J|) dxi * deta). 
+    // Where PSI(xi, eta) = {psi1(xi, eta), psi2(xi, eta), psi3(xi, eta), ...} is a row vector containing all shape functions and
+    // |J| is the determinant of Jacobi matrix for the transformation to the unit triangle. Not that |J| is scalar which does not
+    // depend of xi and eta, thus we can write the formula as |J| * integral(psi_i(xi, eta) * psi_j(xi, eta) * dxi * deta). So
+    // there is no need to integrate the shape funcions for each element. We shall precompute the integral and then for each element
+    // find |J| and multiply the precompute integral by it.
+
     const int p2Size = 6;
+    // This will hold the result of integral(psi_i(xi, eta) * psi_j(xi, eta) dxi * deta)
     real p2Squared[p2Size][p2Size] = {};
     const auto squareP2 = [p2Size](const real xi, const real eta, real* out) -> void {
         real p2Res[p2Size];
@@ -203,6 +211,7 @@ void NavierStokesAssembly::assemblVelocityeMassMatrix() {
     };
     integrateOverTriangle<p2Size * p2Size>(squareP2, (real*)p2Squared);
 
+    // Lambda wich takes advantage of precomputed shape function integral
     const auto localMass = [&p2Squared, p2Size](real* elementNodes, real* localMatrixOut) -> void {
         const real jDetAbs = std::abs(linTriangleTmJacobian(elementNodes));
         for(int i = 0; i < p2Size; ++i) {
@@ -216,8 +225,18 @@ void NavierStokesAssembly::assemblVelocityeMassMatrix() {
 }
 
 void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
+    // Compute the mass matrix. Local stiffness matrix is of the form Integral(Transpose(B.DPSI(xi, eta)/|J|).B.DPSI(xi, eta)/|J| * abs(|J|) dxi, deta),
+    // |J| cancel out to produce more readable result 1/abs(|J|) * Integral(Transpose(B.PSI(xi, eta)).B.PSI(xi, eta) * dxi, deta)
+    // Where DPSI(xi, eta) = {dpsi_1(xi, eta)/dxi, ..., dpsi_n(xi, eta)/dxi, dpsi_1(xi, eta)/deta ... dpsi_n(xi, eta)/deta} is a
+    // row vector containing the gradient of each shape function, first are the derivatives in the xi direction then are the derivatives
+    // in the eta direction |J| is the determinant of the linear transformation to the unit triangle and B/|J| is a 2x2 matrix which
+    // represents the Grad operator in terms of xi and eta. As with mass matrix note, that B and |J| do not depend on xi and eta, only
+    // the gradient of the shape functions dependon xi and eta. Thus we can precompute all pairs of shape function integrals and reuse
+    // them in each element. The main complexity comes from the matrix B, which multiples the shape functions.
+
     const int pSize = 6;
     const int delPSize = pSize * 2;
+    // Compute the integral of each pair shape function derivatives.
     const auto squareDelP = [delPSize, pSize](const real xi, const real eta, real* out) -> void{
         real delP[2][pSize] = {};
         delP2Shape(xi, eta, delP);
@@ -249,6 +268,16 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
                     delPSq[linearize2DIndex(2 * pSize, pSize + i, pSize + j)]
                 };
                 for(int k = 0; k < 2; ++k) {
+                    // This function takes advantage that in the integral for the local matrix only del(DPSI) depends on xi and eta
+                    // The problem is the matrix B which represents the Grad operator. We have Transpose(B.DPSI(xi, eta)).B.DPSI(xi, eta) = 
+                    // Transpose(DPSI).Transpose(B).B.DPSI. Let us denote U = Transpose(DPSI).Transpose(B) and V = B.DPSI
+                    // U[i][j] = Sum(B[j][k]*DPSI[k][i], k=0, 1) = Sum(Transpose(DPSI)[i][k]*Transpose(B)[k][j], k = 0, 1) = 
+                    // V[i][j] = Sum(B[i][k]*DPSI[k][j], k=0, 1)
+                    // Let us denote the result - localMatrixOut with R = U.V
+                    // R[i][j] = Sum(U[i][k]*V[k][j], k=0, 1)
+                    // R[i][j] = Sum(Sum(DPSI[k'][i]*B[k][k'], k'=0, 1) * Sum(B[k][k'] * DPSI[k']j[],k'=0, 1), k=0, 1)
+                    // When we expand the two sums and the multiplication we get the expression for localMatrixOut
+                    // This way we have separated the pairs of shape function derivatives and we can use the precomputed values
                     localMatrixOut[outIndex] += sq[0]*b[k][0]*b[k][0] + sq[1]*b[k][0]*b[k][1] + sq[2]*b[k][0]*b[k][1] + sq[3]*b[k][1]*b[k][1];
                 }
                 localMatrixOut[outIndex] *= J;
