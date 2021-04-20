@@ -1,5 +1,6 @@
 [requires]
 nlohmann_json/3.9.1
+benchmark/1.5.0
 
 [generators]
 cmake_find_package_multi

@@ -48,14 +48,6 @@ private:
     /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
     void assembleVelocityStiffnessMatrix();
 
-    /// Handles assembling the velocity mass matrix. It does all operations. The function is added in order
-    /// to test performance agains the precomputing variant assemblVelocityMassMatrix
-    void assemblVelocityMassMatrix2();
-
-    /// Handles assembling the velocity mass matrix. It does all operations. The function is added in order
-    /// to test performance agains the precomputing variant assemblVelocityMassMatrix
-    void assembleVelocityStiffnessMatrix2();
-
     /// Viscosity of the fluid
     real viscosity;
     /// Size of the time step used when approximating derivatives with respect to time
