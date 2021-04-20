@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstring>
 #include "assembly.h"
 #include "grid.h"
 
@@ -15,7 +16,7 @@ void NavierStokesAssembly::assembleMatrix(const TLocalF& localFunction, SMM::CSR
     SMM::TripletMatrix triplet(numNodes, numNodes);
     for(int i = 0; i < numElements; ++i) {
         grid.getElement(i, element, elementNodes);
-        localFunction(elementNodes, &localMatrix[0][0]);
+        localFunction(elementNodes, localMatrix);
         for(int localRow = 0; localRow < localRows; ++localRow) {
             const int globalRow = element[localRow];
             for(int localCol = 0; localCol < localCols; ++localCol) {
@@ -36,7 +37,7 @@ void NavierStokesAssembly::assembleMatrix(const TLocalF& localFunction, SMM::CSR
 /// @param[in] b The right hand side matrix
 /// @param[out] out The result matrix. The matrix must be filled with zeroes when passed to the function.
 template<int aRows, int aCols, int bCols>
-inline constexpr void matrixMult(const real a[aRows][aCols], const real b[aCols][bCols], real out[aRows][bCols]) {
+inline constexpr void multiplyMatrix(const real (&a)[aRows][aCols], const real (&b)[aCols][bCols], real (&out)[aRows][bCols]) {
     for(int i = 0; i < aRows; ++i) {
         for(int j = 0; j < bCols; ++j) {
             for(int k = 0; k < aCols; ++k) {
@@ -52,11 +53,27 @@ inline constexpr void matrixMult(const real a[aRows][aCols], const real b[aCols]
 /// @param[in] a The matrix which will be multiplied by its transpose
 /// @param[out] out The resulting matrix. The matrix must be filled with zeroes when passed to the function.
 template<int rows, int cols>
-inline constexpr void multiplyByTranspose(const real a[rows][cols], real out[rows][rows]) {
+inline constexpr void multiplyByTranspose(const real (&a)[rows][cols], real (&out)[rows][rows]) {
     for(int i = 0; i < rows; ++i) {
         for(int j = 0; j < rows; ++j) {
             for(int k = 0; k < cols; ++k) {
                 out[i][j] += a[i][k] * a[j][k];
+            }
+        }
+    }
+}
+
+/// Compute Transpose(A).A. First transpose A and the multiply the transpose by A, without explicitly computing the transpose
+/// @tparam rows Number of rows in the matrix
+/// @tparam cols Number of columns in the matrix
+/// @param[in] a The matrix which will be multiplied by its transpose
+/// @param[out] out The resulting matrix. The matrix must be filled with zeroes when passed to the function.
+template<int rows, int cols>
+inline constexpr void transposeMutiply(const real (&a)[rows][cols], real (&out)[cols][cols]) {
+    for(int i = 0; i < cols; ++i) {
+        for(int j = 0; j < cols; ++j) {
+            for(int k = 0; k < rows; ++k) {
+                out[i][j] += a[k][i] * a[k][j];
             }
         }
     }
@@ -206,9 +223,7 @@ inline void differentialOperator(const real* nodes, real& outDetJ, real outB[2][
 /// Find the determinant of the Jacobi matrix for a linear transformation of random triangle to the unit one
 /// @param[in] kx World x coordinate of the node which will be transformed to (0, 0)
 /// @param[in] ky World y coordinate of the node which will be transformed to (0, 0)
-/// @param[in] lx World x coordinates of the node which will be transformed to (1, 0)
-/// @param[in] ly World y coordinates of the node which will be transformed to (1, 0)
-/// @param[in] mx World x coordinates of the node which will be transformed to (0, 1)
+/// @param[in] lx World x coordinates of the node which will be transformed to (1integrateOverTriangle, 1)
 /// @param[in] my World y coordinates of the node which will be transformed to (0, 1)
 /// @return The determinant of the Jacobi matrix which transforms k, l, m to the unit triangle
 inline real linTriangleTmJacobian(const real* elementNodes) {
@@ -241,8 +256,7 @@ NavierStokesAssembly::NavierStokesAssembly(FemGrid2D&& grid, const real dt, cons
 }
 
 void NavierStokesAssembly::assemble() {
-    assemblVelocityMassMatrix();
-    assembleVelocityStiffnessMatrix();
+
 }
 
 void NavierStokesAssembly::assemblVelocityMassMatrix() {
@@ -269,12 +283,11 @@ void NavierStokesAssembly::assemblVelocityMassMatrix() {
     integrateOverTriangle<p2Size * p2Size>(squareP2, reinterpret_cast<real*>(p2Squared));
 
     // Lambda wich takes advantage of precomputed shape function integral
-    const auto localMass = [&p2Squared, p2Size](real* elementNodes, real* localMatrixOut) -> void {
+    const auto localMass = [&p2Squared, p2Size](real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
         const real jDetAbs = std::abs(linTriangleTmJacobian(elementNodes));
         for(int i = 0; i < p2Size; ++i) {
             for(int j = 0; j < p2Size; ++j) {
-                const int index = i * p2Size + j;
-                localMatrixOut[index] = p2Squared[i][j] * jDetAbs;
+                localMatrixOut[i][j] = p2Squared[i][j] * jDetAbs;
             }
         }
     };
@@ -309,15 +322,14 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
     real delPSq[delPSize][delPSize] = {};
     integrateOverTriangle<delPSize * delPSize>(squareDelP, reinterpret_cast<real*>(delPSq));
 
-    const auto localStiffness = [&delPSq, pSize](real* elementNodes, real* localMatrixOut) -> void {
+    const auto localStiffness = [&delPSq, pSize](real* elementNodes, real localMatrixOut[pSize][pSize]) -> void {
         real b[2][2];
         real J;
         differentialOperator(elementNodes, J, b);
         J = real(1.0) / std::abs(J);
         for(int i = 0; i < pSize; ++i) {
             for(int j = 0; j < pSize; ++j) {
-                const int outIndex = linearize2DIndex(pSize, i, j);
-                localMatrixOut[outIndex] = real(0);
+                localMatrixOut[i][j] = real(0);
                 const real sq[4] = {
                     delPSq[i][j],
                     delPSq[i][pSize + j],
@@ -335,14 +347,77 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
                     // R[i][j] = Sum(Sum(DPSI[k'][i]*B[k][k'], k'=0, 1) * Sum(B[k][k'] * DPSI[k']j[],k'=0, 1), k=0, 1)
                     // When we expand the two sums and the multiplication we get the expression for localMatrixOut
                     // This way we have separated the pairs of shape function derivatives and we can use the precomputed values
-                    localMatrixOut[outIndex] += sq[0]*b[k][0]*b[k][0] + sq[1]*b[k][0]*b[k][1] + sq[2]*b[k][0]*b[k][1] + sq[3]*b[k][1]*b[k][1];
+                    localMatrixOut[i][j] += sq[0]*b[k][0]*b[k][0] + sq[1]*b[k][0]*b[k][1] + sq[2]*b[k][0]*b[k][1] + sq[3]*b[k][1]*b[k][1];
                 }
-                localMatrixOut[outIndex] *= J;
+                localMatrixOut[i][j] *= J;
             }
         }
     };
 
     assembleMatrix<decltype(localStiffness), pSize, pSize>(localStiffness, stiffnessMatrix);
 }
+
+void NavierStokesAssembly::assemblVelocityMassMatrix2() {
+    const int p2Size = 6;
+    const auto localMass = [p2Size](real *elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
+        const real jDetAbs = std::abs(linTriangleTmJacobian(elementNodes));
+        const auto shapeIntegrant = [p2Size](real xi, real eta, real* out) {
+            real p2Res[p2Size];
+            p2Shape(xi, eta, p2Res);
+            for(int i = 0; i < p2Size; ++i) {
+                for(int j = 0; j < p2Size; ++j) {
+                    const int idx = i * 6 + j;
+                    out[idx] = p2Res[i]*p2Res[j];
+                }
+            }     
+        };
+        real intOut[p2Size][p2Size] = {};
+        integrateOverTriangle<p2Size * p2Size>(shapeIntegrant, (real*)intOut);
+
+        for(int i = 0; i < p2Size; ++i) {
+            for(int j = 0; j < p2Size; ++j) {
+                localMatrixOut[i][j] = intOut[i][j] * jDetAbs;
+            }
+        }
+    };
+
+    assembleMatrix<decltype(localMass), p2Size, p2Size>(localMass, velocityMassMatrix);
+}
+
+void NavierStokesAssembly::assembleVelocityStiffnessMatrix2() {
+    const int p2Size = 6;
+    const int delP2Size = 2 * p2Size;
+
+    const auto localStiffness = [p2Size](real *elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
+        real b[2][2];
+        real J;
+        differentialOperator(elementNodes, J, b);
+        J = real(1.0) / std::abs(J);
+
+        const auto shapeIntegrant = [&b](const real xi, const real eta, real* out) {
+            real delPsi[2][p2Size];
+            delP2Shape(xi, eta, delPsi);
+
+            real bPsi[2][p2Size] = {};
+            multiplyMatrix(b, delPsi, bPsi);
+
+            real res[p2Size][p2Size] = {};
+            transposeMutiply(bPsi, res);
+
+            memcpy(out, res, sizeof(real) * p2Size * p2Size);
+        };
+
+        real intOut[p2Size][p2Size] = {};
+        integrateOverTriangle<p2Size * p2Size>(shapeIntegrant, (real*)intOut);
+        for(int i = 0; i < p2Size; ++i) {
+            for(int j = 0; j < p2Size; ++j) {
+                localMatrixOut[i][j] = intOut[i][j] * J;
+            }
+        }
+    };
+
+    assembleMatrix<decltype(localStiffness), p2Size, p2Size>(localStiffness, stiffnessMatrix);
+}
+
 
 }
