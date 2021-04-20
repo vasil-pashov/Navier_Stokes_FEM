@@ -32,3 +32,8 @@ add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
 target_include_directories(${PROJECT_NAME} PRIVATE include)
 target_link_libraries(${PROJECT_NAME} INTERFACE sparse_matrix_math::sparse_matrix_math)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
+
+if(${WITH_GBENCH})
+	find_package(benchmark REQUIRED CONFIG)
+	target_link_libraries(${PROJECT_NAME} PRIVATE benchmark::benchmark)
+endif()
