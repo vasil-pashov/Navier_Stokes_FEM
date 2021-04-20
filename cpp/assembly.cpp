@@ -4,6 +4,63 @@
 
 namespace NSFem {
 
+template<typename TLocalF, int localRows, int localCols>
+void NavierStokesAssembly::assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out) {
+    const int numNodes = grid.getNodesCount();
+    const int numElements = grid.getElementsCount();
+    const int elementSize = std::max(localRows, localCols);
+    int element[elementSize];
+    real elementNodes[2 * elementSize];
+    real localMatrix[localRows][localCols];
+    SMM::TripletMatrix triplet(numNodes, numNodes);
+    for(int i = 0; i < numElements; ++i) {
+        grid.getElement(i, element, elementNodes);
+        localFunction(elementNodes, &localMatrix[0][0]);
+        for(int localRow = 0; localRow < localRows; ++localRow) {
+            const int globalRow = element[localRow];
+            for(int localCol = 0; localCol < localCols; ++localCol) {
+                const int globalCol = element[localCol];
+                triplet.addEntry(globalRow, globalCol, localMatrix[localRow][localCol]);
+            }
+        }
+    }
+    out.init(triplet);
+}
+
+/// Multiply two matrices represented as 2D arrays.
+/// @tparam aRows Number of rows of the left hand side matrix.
+/// @tparam aCols Number of columns of the left hand side matrix. The operation is valid
+/// only if the right hand side matrix has the same number of rows.
+/// @tparam bCols Number of columns of the right hand side matrix.
+/// @param[in] a The left hand side matrix
+/// @param[in] b The right hand side matrix
+/// @param[out] out The result matrix. The matrix must be filled with zeroes when passed to the function.
+template<int aRows, int aCols, int bCols>
+inline constexpr void matrixMult(const real a[aRows][aCols], const real b[aCols][bCols], real out[aRows][bCols]) {
+    for(int i = 0; i < aRows; ++i) {
+        for(int j = 0; j < bCols; ++j) {
+            for(int k = 0; k < aCols; ++k) {
+                out[i][j] += a[i][k] * b[k][j];
+            }
+        }
+    }
+}
+
+/// Multiply matrix by its transpose
+/// @tparam rows Number of rows in the matrix
+/// @tparam cols Number of columns in the matrix
+/// @param[in] a The matrix which will be multiplied by its transpose
+/// @param[out] out The resulting matrix. The matrix must be filled with zeroes when passed to the function.
+template<int rows, int cols>
+inline constexpr void multiplyByTranspose(const real a[rows][cols], real out[rows][rows]) {
+    for(int i = 0; i < rows; ++i) {
+        for(int j = 0; j < rows; ++j) {
+            for(int k = 0; k < cols; ++k) {
+                out[i][j] += a[i][k] * a[j][k];
+            }
+        }
+    }
+}
 
 /// Shape functions for 2D triangluar element with degrees of freedom in each triangle node
 /// @param[in] xi - Coordinate in the (transformed) unit triangle along the xi (aka x) axis

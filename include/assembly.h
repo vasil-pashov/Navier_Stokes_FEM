@@ -40,11 +40,11 @@ private:
     template<typename TLocalF, int localRows, int localCols>
     void assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out);
 
-    /// Add function to handle assembling the velocity mass matrix. It precomputes the integrals of each pair
+    /// Handles assembling the velocity mass matrix. It precomputes the integrals of each pair
     /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
     void assemblVelocityMassMatrix();
 
-    /// Add function to handle assembling the velocity mass stiffness. It precomputes the integrals of each pair
+    /// Handles assembling the velocity mass stiffness. It precomputes the integrals of each pair
     /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
     void assembleVelocityStiffnessMatrix();
 
@@ -53,28 +53,5 @@ private:
     /// Size of the time step used when approximating derivatives with respect to time
     real dt;
 };
-
-template<typename TLocalF, int localRows, int localCols>
-void NavierStokesAssembly::assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out) {
-    const int numNodes = grid.getNodesCount();
-    const int numElements = grid.getElementsCount();
-    const int elementSize = std::max(localRows, localCols);
-    int element[elementSize];
-    real elementNodes[2 * elementSize];
-    real localMatrix[localRows][localCols];
-    SMM::TripletMatrix triplet(numNodes, numNodes);
-    for(int i = 0; i < numElements; ++i) {
-        grid.getElement(i, element, elementNodes);
-        localFunction(elementNodes, &localMatrix[0][0]);
-        for(int localRow = 0; localRow < localRows; ++localRow) {
-            const int globalRow = element[localRow];
-            for(int localCol = 0; localCol < localCols; ++localCol) {
-                const int globalCol = element[localCol];
-                triplet.addEntry(globalRow, globalCol, localMatrix[localRow][localCol]);
-            }
-        }
-    }
-    out.init(triplet);
-}
 
 }
