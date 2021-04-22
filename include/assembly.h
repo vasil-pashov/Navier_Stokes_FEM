@@ -37,6 +37,15 @@ private:
     /// when the time changes. 
     SMM::CSRMatrix divergenceMatrix[2];
 
+    /// Vector containing the approximate solution at each mesh node for the current time step
+    /// First are the values in u direction for all nodes and the the values in v direction for all nodes
+    /// When using P2-P1 elements the pressure is at the verices of the triangle and the midpoints of each side
+    SMM::Vector currentVelocitySolution;
+
+    /// Vector containing the approximate solution for the pressure at each pressure nodes
+    /// When using P2-P1 elements the pressure is only at the vertices of the triangle
+    SMM::Vector currentPressureSolution;
+
     template<typename TLocalF, int localRows, int localCols>
     void assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out);
 
@@ -47,6 +56,8 @@ private:
     /// Handles assembling the velocity mass stiffness. It precomputes the integrals of each pair
     /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
     void assembleVelocityStiffnessMatrix();
+
+    void assembleConvectionMatrix();
 
     /// Viscosity of the fluid
     real viscosity;

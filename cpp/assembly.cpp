@@ -131,22 +131,22 @@ inline void p2Shape(const real xi, const real eta, real out[6]) {
 /// @param[in] eta - Coordinate in the (transformed) unit triangle anong the eta (aka y) axis
 /// @param[out] out - This will hold the gradient. The first 6 elements are the derivatives of the shape functions with
 /// respect to xi, next 6 elements are the derivatives of the shape functions with respect to eta
-inline void delP2Shape(const real xi, const real eta, real out[2][6]) {
+inline void delP2Shape(const real xi, const real eta, real out[12]) {
     // dpsi/dxi
-    out[0][0] = -3 + 4 * eta + 4 * xi;
-    out[0][1] = -1 + 4 * xi;
-    out[0][2] = 0.0f;
-    out[0][3] = 4 * eta;
-    out[0][4] = -4 * eta;
-    out[0][5] = 4 - 4 * eta - 8 * xi;
+    out[0] = -3 + 4 * eta + 4 * xi;
+    out[1] = -1 + 4 * xi;
+    out[2] = 0.0f;
+    out[3] = 4 * eta;
+    out[4] = -4 * eta;
+    out[5] = 4 - 4 * eta - 8 * xi;
 
     // dpsi/deta
-    out[1][0] = -3 + 4 * eta + 4 * xi;
-    out[1][1] = 0;
-    out[1][2] = -1 + 4 * eta;
-    out[1][3] = 4 * xi;
-    out[1][4] = 4 - 8 * eta - 4 * xi;
-    out[1][5] = -4 * xi;
+    out[6] = -3 + 4 * eta + 4 * xi;
+    out[7] = 0;
+    out[8] = -1 + 4 * eta;
+    out[9] = 4 * xi;
+    out[10] = 4 - 8 * eta - 4 * xi;
+    out[11] = -4 * xi;
 }
 
 /// Integrate vector function of two dimensional vector argument over an unit triangle
@@ -304,37 +304,35 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
     // the gradient of the shape functions dependon xi and eta. Thus we can precompute all pairs of shape function integrals and reuse
     // them in each element. The main complexity comes from the matrix B, which multiples the shape functions.
 
-    const int pSize = 6;
-    const int delPSize = pSize * 2;
+    const int p2Size = 6;
+    const int delP2Size = p2Size * 2;
     // Compute the integral of each pair shape function derivatives.
-    const auto squareDelP = [delPSize, pSize](const real xi, const real eta, real* out) -> void{
-        real delP[2][pSize] = {};
-        delP2Shape(xi, eta, delP);
-        for(int i = 0; i < delPSize; ++i) {
-            for(int j = 0; j < delPSize; ++j) {
-                const int outIndex = linearize2DIndex(delPSize, i, j);
-                const real delPsi1 = *(reinterpret_cast<real*>(delP) + i);
-                const real delPsi2 = *(reinterpret_cast<real*>(delP) + j);
-                out[outIndex] = delPsi1 * delPsi2;
+    const auto squareDelP = [delP2Size](const real xi, const real eta, real* out) -> void{
+        real delP2[delP2Size] = {};
+        delP2Shape(xi, eta, delP2);
+        for(int i = 0; i < delP2Size; ++i) {
+            for(int j = 0; j < delP2Size; ++j) {
+                const int outIndex = linearize2DIndex(delP2Size, i, j);
+                out[outIndex] = delP2[i] * delP2[j];
             }
         }
     };
-    real delPSq[delPSize][delPSize] = {};
-    integrateOverTriangle<delPSize * delPSize>(squareDelP, reinterpret_cast<real*>(delPSq));
+    real delPSq[delP2Size][delP2Size] = {};
+    integrateOverTriangle<delP2Size * delP2Size>(squareDelP, reinterpret_cast<real*>(delPSq));
 
-    const auto localStiffness = [&delPSq, pSize](real* elementNodes, real localMatrixOut[pSize][pSize]) -> void {
+    const auto localStiffness = [&delPSq, p2Size](real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
         real b[2][2];
         real J;
         differentialOperator(elementNodes, J, b);
         J = real(1.0) / std::abs(J);
-        for(int i = 0; i < pSize; ++i) {
-            for(int j = 0; j < pSize; ++j) {
+        for(int i = 0; i < p2Size; ++i) {
+            for(int j = 0; j < p2Size; ++j) {
                 localMatrixOut[i][j] = real(0);
                 const real sq[4] = {
                     delPSq[i][j],
-                    delPSq[i][pSize + j],
-                    delPSq[pSize + i][j],
-                    delPSq[pSize + i][pSize + j]
+                    delPSq[i][p2Size + j],
+                    delPSq[p2Size + i][j],
+                    delPSq[p2Size + i][p2Size + j]
                 };
                 for(int k = 0; k < 2; ++k) {
                     // This function takes advantage that in the integral for the local matrix only del(DPSI) depends on xi and eta
@@ -354,7 +352,11 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
         }
     };
 
-    assembleMatrix<decltype(localStiffness), pSize, pSize>(localStiffness, stiffnessMatrix);
+    assembleMatrix<decltype(localStiffness), p2Size, p2Size>(localStiffness, stiffnessMatrix);
+}
+
+void NavierStokesAssembly::assembleConvectionMatrix() {
+    
 }
 
 }
