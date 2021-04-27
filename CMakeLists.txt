@@ -25,6 +25,7 @@ set(CPP
 set(HEADERS
 	include/grid.h
 	include/assembly.h
+	include/static_matrix.h
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})

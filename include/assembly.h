@@ -35,7 +35,7 @@ private:
     /// Where fi_i is the i-th velocity basis function and chi_j is the j-th pressure basis function
     /// These are used when pressure is found from the tentative velocity. These matrices are constant for the given mesh and do not change
     /// when the time changes. 
-    SMM::CSRMatrix divergenceMatrix[2];
+    SMM::CSRMatrix divergenceMatrix;
 
     /// Vector containing the approximate solution at each mesh node for the current time step
     /// First are the values in u direction for all nodes and the the values in v direction for all nodes
@@ -49,15 +49,24 @@ private:
     template<typename TLocalF, int localRows, int localCols>
     void assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out);
 
-    /// Handles assembling the velocity mass matrix. It precomputes the integrals of each pair
+    /// Handles assembling of the velocity mass matrix. It precomputes the integrals of each pair
     /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
     void assemblVelocityMassMatrix();
 
-    /// Handles assembling the velocity mass stiffness. It precomputes the integrals of each pair
+    /// Handles assembling of the velocity mass stiffness. It precomputes the integrals of each pair
     /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
     void assembleVelocityStiffnessMatrix();
 
+    /// Handles assembling of the convection matrix. It does it directly by the formula and does not use
+    /// precomputed integrals. In theory it's possible, but it would make the code too complicated as it
+    /// would require combined integral of 3 basis functions (i,j,k forall i,j,k)
     void assembleConvectionMatrix();
+
+    /// This handles the assembling of the divergence matrix. This function looks a lot like assembleMatrix.
+    /// In fact we could split the divergence matrix into two matrices (one for x direction and one for y direction)
+    /// each with it's own local function. This way assembleMatrix could be used, but this would mean that we have
+    /// to iterate over all elements twice.
+    void assembleDivergenceMatrix();
 
     /// Viscosity of the fluid
     real viscosity;

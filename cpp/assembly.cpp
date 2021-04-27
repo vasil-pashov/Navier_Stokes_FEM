@@ -2,6 +2,7 @@
 #include <cstring>
 #include "assembly.h"
 #include "grid.h"
+#include "static_matrix.h"
 
 namespace NSFem {
 
@@ -10,17 +11,17 @@ void NavierStokesAssembly::assembleMatrix(const TLocalF& localFunction, SMM::CSR
     const int numNodes = grid.getNodesCount();
     const int numElements = grid.getElementsCount();
     const int elementSize = std::max(localRows, localCols);
-    int element[elementSize];
+    int elementIndexes[elementSize];
     real elementNodes[2 * elementSize];
     real localMatrix[localRows][localCols];
     SMM::TripletMatrix triplet(numNodes, numNodes);
     for(int i = 0; i < numElements; ++i) {
-        grid.getElement(i, element, elementNodes);
-        localFunction(elementNodes, localMatrix);
+        grid.getElement(i, elementIndexes, elementNodes);
+        localFunction(elementIndexes, elementNodes, localMatrix);
         for(int localRow = 0; localRow < localRows; ++localRow) {
-            const int globalRow = element[localRow];
+            const int globalRow = elementIndexes[localRow];
             for(int localCol = 0; localCol < localCols; ++localCol) {
-                const int globalCol = element[localCol];
+                const int globalCol = elementIndexes[localCol];
                 triplet.addEntry(globalRow, globalCol, localMatrix[localRow][localCol]);
             }
         }
@@ -200,7 +201,8 @@ void integrateOverTriangle(const TFunctor& f, real* out) {
 /// (x0, y0), (x1, y1), (x2, y2) and they are supposed to be remapped to (0, 0), (1, 0), (0, 1) in the unit tirangle
 /// @param[out] outDetJ The determinant of the Jacobi matrix
 /// @param[out] outB The matrix B used in the operator as illustrated above it must be of size 4
-inline void differentialOperator(const real* nodes, real& outDetJ, real outB[2][2]) {
+template<typename TMatrix>
+inline void differentialOperator(const real* nodes, real& outDetJ, TMatrix& outB) {
     const real xk = nodes[0];
     const real yk = nodes[1];
     const real xl = nodes[2];
@@ -256,7 +258,9 @@ NavierStokesAssembly::NavierStokesAssembly(FemGrid2D&& grid, const real dt, cons
 }
 
 void NavierStokesAssembly::assemble() {
-
+    assemblVelocityMassMatrix();
+    assembleVelocityStiffnessMatrix();
+    assembleConvectionMatrix();
 }
 
 void NavierStokesAssembly::assemblVelocityMassMatrix() {
@@ -283,7 +287,7 @@ void NavierStokesAssembly::assemblVelocityMassMatrix() {
     integrateOverTriangle<p2Size * p2Size>(squareP2, reinterpret_cast<real*>(p2Squared));
 
     // Lambda wich takes advantage of precomputed shape function integral
-    const auto localMass = [&p2Squared, p2Size](real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
+    const auto localMass = [&p2Squared, p2Size](const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
         const real jDetAbs = std::abs(linTriangleTmJacobian(elementNodes));
         for(int i = 0; i < p2Size; ++i) {
             for(int j = 0; j < p2Size; ++j) {
@@ -320,7 +324,7 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
     real delPSq[delP2Size][delP2Size] = {};
     integrateOverTriangle<delP2Size * delP2Size>(squareDelP, reinterpret_cast<real*>(delPSq));
 
-    const auto localStiffness = [&delPSq, p2Size](real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
+    const auto localStiffness = [&delPSq, p2Size](const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
         real b[2][2];
         real J;
         differentialOperator(elementNodes, J, b);
@@ -356,7 +360,39 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
 }
 
 void NavierStokesAssembly::assembleConvectionMatrix() {
-    
+    const int p2Size = 6;
+    const int nodesCount = grid.getNodesCount();
+    const auto localConvection = [&](const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
+        StaticMatrix<real, p2Size, 2> velocity;
+        for(int i = 0; i < p2Size; ++i) {
+            const int uIndex = elementIndexes[i];
+            const int vIndex = elementIndexes[i] + nodesCount;
+            velocity[i][0] = currentVelocitySolution[uIndex];
+            velocity[i][1] = currentVelocitySolution[vIndex];
+        }
+
+        real J;
+        StaticMatrix<real, 2, 2> B;
+        differentialOperator(elementNodes, J, B);
+        const int sign = J > 0 ? 1 : -1;
+
+        // The local convection matrix is of the form Integrate(Transpose(PSI(xi, eta)).PSI(xi, eta).UV.B.DPSI(xi, eta) * dxi * deta)
+        // This lambda is the function which is being integrated, it's later passed to integrate over triangle to get the localMatrix
+        const auto convectionIntegrant = [&](const real xi, const real eta, real* out) -> void {
+            // TODO: p2Shape and delP2Shape can be cached for various xi and eta used by the integrator
+            StaticMatrix<real, 1, p2Size> psi;
+            p2Shape(xi, eta, psi.data());
+
+            StaticMatrix<real, 2, p2Size> delPsi;
+            delP2Shape(xi, eta, psi.data());
+
+            StaticMatrix<real, p2Size, p2Size> result = (psi.getTransposed() * psi * velocity * B * delPsi) * sign;
+            memcpy(out, result.data(), sizeof(real) * result.getRows() * result.getCols());
+        };
+        integrateOverTriangle<p2Size * p2Size>(convectionIntegrant, reinterpret_cast<real*>(localMatrixOut));
+    };
+
+    assembleMatrix<decltype(localConvection), p2Size, p2Size>(localConvection, convectionMatrix);
 }
 
 }
