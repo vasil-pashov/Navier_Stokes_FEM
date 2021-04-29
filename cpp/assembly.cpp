@@ -258,9 +258,11 @@ NavierStokesAssembly::NavierStokesAssembly(FemGrid2D&& grid, const real dt, cons
 }
 
 void NavierStokesAssembly::assemble() {
-    assemblVelocityMassMatrix();
-    assembleVelocityStiffnessMatrix();
-    assembleConvectionMatrix();
+    // assemblVelocityMassMatrix();
+    // assembleVelocityStiffnessMatrix();
+    // assembleConvectionMatrix();
+    assembleDivergenceMatrix();
+    SMM::saveDenseText("/home/vasil/Documents/FMI/Магистратура/Дипломна/CPP/div_u.txt", divergenceMatrix);
 }
 
 void NavierStokesAssembly::assemblVelocityMassMatrix() {
@@ -393,6 +395,66 @@ void NavierStokesAssembly::assembleConvectionMatrix() {
     };
 
     assembleMatrix<decltype(localConvection), p2Size, p2Size>(localConvection, convectionMatrix);
+}
+
+void NavierStokesAssembly::assembleDivergenceMatrix() {
+    const int p1Size = 3;
+    const int p2Size = 6;
+    const int numNodes = grid.getNodesCount();
+    const int numElements = grid.getElementsCount();
+    const int elementSize = std::max(p1Size, p2Size);
+
+    // Matrix to hold combined values for the integrals: Integrate(psi_i(xi, eta) * dpsi_j(xi, eta)/dxi * dxi * deta) and
+    // Integrate(psi(xi, eta) * dpsi(xi, eta)/deta * dxi * deta). Where i is in [0;p1Size-1] and j is in [0;p2Size-1]
+    // The first p2Size entries in each row are the first integral and the second represent the second integral 
+    StaticMatrix<real, p1Size, 2 * p2Size> p1DelP2Combined;
+    auto combineP1P2 = [&](const real xi, const real eta, real* out) -> void {
+        real p1Res[p1Size] = {};
+        p1Shape(xi, eta, p1Res);
+
+        real delP2Res[2][p2Size] = {};
+        delP2Shape(xi, eta, reinterpret_cast<real*>(delP2Res));
+
+        for(int i = 0; i < p1Size; ++i) {
+            for(int j = 0; j < p2Size; ++j) {
+                for(int k = 0; k < 2; ++k) {
+                    const int idx = linearize2DIndex(2 * p2Size, i, j + k * p2Size);
+                    out[idx] = p1Res[i] * delP2Res[k][j];
+                }
+            }
+        }
+    };
+    integrateOverTriangle<p1Size * 2 * p2Size>(combineP1P2, p1DelP2Combined.data());
+
+    int elementIndexes[elementSize];
+    real elementNodes[2 * elementSize];
+    SMM::TripletMatrix triplet(numNodes, numNodes * 2);
+    real J;
+    StaticMatrix<real, 2, 2> B;
+    StaticMatrix<real, p1Size, p2Size> b1Local;
+    StaticMatrix<real, p1Size, p2Size> b2Local;
+    for(int i = 0; i < numElements; ++i) {
+        grid.getElement(i, elementIndexes, elementNodes);
+        differentialOperator(elementNodes, J, B);
+
+        // Compute local matrices
+        for(int p = 0; p < p1Size; ++p) {
+            for(int q = 0; q < p2Size; ++q) {
+                b1Local[p][q] = B[0][0] * p1DelP2Combined[p][q] + B[0][1] * p1DelP2Combined[p][q + p2Size];
+                b2Local[p][q] = B[1][0] * p1DelP2Combined[p][q] + B[1][1] * p1DelP2Combined[p][q + p2Size];
+            }
+        }
+        // Put local matrices into the global matrix
+        for(int localRow = 0; localRow < p1Size; ++localRow) {
+            const int globalRow = elementIndexes[localRow];
+            for(int localCol = 0; localCol < p2Size; ++localCol) {
+                const int globalCol = elementIndexes[localCol];
+                triplet.addEntry(globalRow, globalCol, b1Local[localRow][localCol]);
+                triplet.addEntry(globalRow, globalCol + numNodes, b2Local[localRow][localCol]);
+            }
+        }
+    }
+    divergenceMatrix.init(triplet);
 }
 
 }

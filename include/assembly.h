@@ -65,7 +65,8 @@ private:
     /// This handles the assembling of the divergence matrix. This function looks a lot like assembleMatrix.
     /// In fact we could split the divergence matrix into two matrices (one for x direction and one for y direction)
     /// each with it's own local function. This way assembleMatrix could be used, but this would mean that we have
-    /// to iterate over all elements twice.
+    /// to iterate over all elements twice and also offset all indexes by the number of nodes for the second (y drection)
+    /// matrix.
     void assembleDivergenceMatrix();
 
     /// Viscosity of the fluid

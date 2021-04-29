@@ -8,7 +8,13 @@ namespace NSFem {
 template<typename T, int rows, int cols>
 class StaticMatrix {
 public:
-    StaticMatrix() = default;
+    StaticMatrix() {
+        for(int i = 0; i < rows; ++i) {
+            for(int j = 0; j < cols; ++j) {
+                matrix[i][j] = T(0);
+            }
+        }
+    }
 
     explicit StaticMatrix(T in[rows][cols]) : StaticMatrix() {
         std::memcpy(matrix, in, sizeof(T) * rows * cols);
@@ -97,7 +103,7 @@ public:
     }
 
     T& element(const int i, const int j) {
-        assert(i < rows && j < cols);
+        assert(0 <= i && i < rows && 0 <= j && j < cols);
         return matrix[i][j];
     }
 
