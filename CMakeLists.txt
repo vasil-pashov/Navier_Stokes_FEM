@@ -21,12 +21,16 @@ set(CPP
 	cpp/main.cpp
 	cpp/grid.cpp
 	cpp/assembly.cpp
+	cpp/expression.cpp
+	cpp/error_code.cpp
 )
 
 set(HEADERS
 	include/grid.h
 	include/assembly.h
 	include/static_matrix.h
+	include/expression.h
+	include/error_code.h
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
