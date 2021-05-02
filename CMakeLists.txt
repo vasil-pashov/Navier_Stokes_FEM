@@ -13,7 +13,8 @@ if(NOT DEFINED CMAKE_PREFIX_PATH)
 	set(CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR})
 endif()
 
-find_package(sparse_matrix_math REQUIRED CONFIG)
+find_package(sparse_matrix_math 0.2.0 REQUIRED CONFIG)
+find_package(cpp_tm 0.2.0 REQUIRED CONFIG)
 find_package(nlohmann_json REQUIRED CONFIG)
 
 set(CPP
@@ -25,10 +26,16 @@ set(CPP
 set(HEADERS
 	include/grid.h
 	include/assembly.h
+	include/static_matrix.h
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
 
 target_include_directories(${PROJECT_NAME} PRIVATE include)
-target_link_libraries(${PROJECT_NAME} INTERFACE sparse_matrix_math::sparse_matrix_math)
+target_link_libraries(${PROJECT_NAME} INTERFACE sparse_matrix_math::sparse_matrix_math cpp_tm::cpp_tm)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
+
+if(${WITH_GBENCH})
+	find_package(benchmark REQUIRED CONFIG)
+	target_link_libraries(${PROJECT_NAME} PRIVATE benchmark::benchmark)
+endif()
