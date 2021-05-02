@@ -62,7 +62,7 @@ const inline static Expression::Operator tokenToOperator(const std::vector<Token
 			if (isFirst ||
 				(!isFirst && tokens[tokenIndex - 1].t == Token::Type::OpenParen) ||
 				(!isFirst && tokens[tokenIndex - 1].isOperator())
-				) {
+			) {
 				return Expression::Operator::UnaryMinus;
 			} else {
 				return Expression::Operator::Minus;
@@ -227,9 +227,12 @@ inline static const int getOperatorPrecedence(Expression::Operator op) {
 inline static const bool shouldPop(const std::vector<Expression::Operator>& stack, const Expression::Operator current) {
 	if (stack.empty()) return false;
 	const int topPrecedence = getOperatorPrecedence(stack.back());
-	const int opPrecendece = getOperatorPrecedence(current);
+	const int currentPrecendece = getOperatorPrecedence(current);
 	if (current == Expression::Operator::UnaryMinus) return false;
-	if (topPrecedence >= opPrecendece) return true;
+	// If the last seen operator has higher precedence it must consume its operands, then it
+	// must be added to the tree as a node. That node will be an operand of the current operator
+	// This way we preserve precedence.
+	if (topPrecedence >= currentPrecendece) return true;
 	return false;
 }
 
@@ -276,20 +279,30 @@ EC::ErrorCode Expression::popOperators(
 		if (pendingOperands.empty()) {
 			return EC::ErrorCode("Error while parsing expression. Expected 1 operand got 0");
 		}
-		const int operandIndex = pendingOperands.back();
+		// This is unary operator the operand will always be at the previous index in the tree
+		// Substitute the last operand in the tree with the result of the operator. Since that
+		// result will be added at the end of the tree array we use the size to index the new
+		// node and the push the new node into the tree.
 		pendingOperands.back() = tree.size();
-
 		tree.emplace_back(op);
 	} else if (numArguments == 2) {
 		if (pendingOperands.size() < 2) {
 			return EC::ErrorCode("Error while parsing expression. Expected 2 operands. Got only one.");
 		}
-		const int right = pendingOperands.back();
+		// Consume the two operands and form a new node in the tree. Then substitute the result
+		// push the result of the operator in the list with pending operands. The right-hand side
+		// of the new node will always be at index one less than the the index of new node, while
+		// the left hand side is somewhare to the left of the node (and the right-hand side)
+
+		// Consume the right hand side
 		pendingOperands.pop_back();
 
+		// Consume the left hand side
 		const int left = pendingOperands.back();
 		pendingOperands.pop_back();
 
+		// Create new node, push it at the end of the tree array and push the result of that new
+		// node to the list of pending operands.
 		pendingOperands.push_back(tree.size());
 		tree.emplace_back(left, op);
 	}
@@ -298,10 +311,34 @@ EC::ErrorCode Expression::popOperators(
 }
 
 EC::ErrorCode Expression::init(const char* expression, const int length) {
-	std::vector<Token> tokens;
-	std::vector<int> pendingOperands; // the top of this stack is the index in the tree of the next operand
+	// This is a stack to hold the operands which are to be combined in an expression
+	// An operand is any node in the expression tree. If the node is a leaf then the
+	// value of the operand is the value held in that leaf, if the node not a leaf then
+	// the value of the operand is the value from the subtree with root the given node.
+	// The operands are stored by their element index (position) in the tree. The top
+	// of this stack holds the first operand which must be included in the new node of
+	// the expression.
+	std::vector<int> pendingOperands;
+	// Stack which holds the operators which must be applied to the operands in pendingOperands
+	// The top of this stack is the next operator which must be applied.
 	std::vector<Operator> operatorStack;
+	// This will hold tokenized version of the string expression. The tokens are in the
+	// same order as in the string version of the expression.
+	std::vector<Token> tokens;
 	RETURN_ON_ERROR_CODE(tokenize(expression, tokens));
+	// The loop which creates the tree. The tree is build bottom up all values and variables are leaves.
+	// At each step check the current operand. If it's a value/variable push it to the tree as a leaf and
+	// push that node into the pendingOperands array. If it's operator there are several options:
+	// (i) The operator stack has operator with higher precendece. In this case that operator must be
+	// squashed into a node i.e. it must consume its operands from pendingOperands and this must be added
+	// as a node in the tree. This operation must be executed while all operators on the stack have higher
+	// precedence than the current operator. This operation forces all operators with higher precedence to
+	// be evaluated before operators with lower precedence. Then go to (ii)
+	// (ii) There are no operators on the stack with higher precedence than the current operator. In this
+	// case we add the operator on the operator stack and procede.
+	// (iii) The operator is open parentheses. In this case just add it to the stack
+	// (iv) The operator is close parentheses. We will form an expression tree with all operators and operands
+	// in the parentheses. That tree is going be added as e regular intermediate node in the expression tree.
 	for (int i = 0; i < tokens.size(); ++i) {
 		const Token& t = tokens[i];
 		if (t.isOperator()) {
@@ -339,9 +376,14 @@ EC::ErrorCode Expression::init(const char* expression, const int length) {
 			operatorStack.pop_back();
 		}
 	}
+	// The loop above does not squash all operators and operands into a tree. It just creates nodes and
+	// handles operator precedence. After the loop is done we might be left with some unsquashed operators
+	// for example if all operators have the same precendence. This final loop iterates over all operators
+	// and operands and produces the final tree.
 	while (operatorStack.size()) {
 		popOperators(operatorStack, pendingOperands, tree);
 	}
+	// At the end of the algorithm pendingOperands must have one operand which is the root of the tree
 	if (pendingOperands.size() != 1) {
 		return EC::ErrorCode("Wrong expression: %s", expression);
 	}

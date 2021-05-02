@@ -32,6 +32,12 @@ namespace NSFem {
 		Expression& operator=(const Expression&) = delete;
 		EC::ErrorCode init(const char* expression, const int length);
 		EC::ErrorCode init(const char* expression);
+		/// Evaluate the expression.
+		/// @param[in] variables Map which holds key-value pairs between all variables in the expression
+		/// and values which the user provides for them. It can be null if the expression does not have
+		/// any variables in it
+		/// @param[out] outResult The result of the expression
+		/// @returns ErrorCode for the operation
 		EC::ErrorCode evaluate(const std::unordered_map<char, float>* variables, float& outResult) const;
 	private:
 		class Node {
@@ -74,20 +80,20 @@ namespace NSFem {
 			enum Flags {
 				Leaf = 0,
 				Intermediate = 1,
-				TwoOperands = 2,
-				SymbolicValue = 4
+				TwoOperands = 1 << 1,
+				SymbolicValue = 1 << 2
 			};
 			union {
 				float value;
-				// For operators with two operands keep explicitly only the left operand
-				// The right operand will always be the previous node in the array
+				/// For operators with two operands keep explicitly only the left operand
+				/// The right operand will always be the previous node in the array
 				int leftIndex;
 				char variableName;
 			};
-			// The first bit of flags tells us if the node is leaf - 0 or intermediate - 1
-			// The second bit tells us if the operator is unary - 0 or binary - 1
-			// The third bit tells us if we have numeric value - 0 or symbolic - 1
-			// The remaining 5 bits are left for the operator
+			/// The first bit of flags tells us if the node is leaf - 0 or intermediate - 1
+			/// The second bit tells us if the operator is unary - 0 or binary - 1
+			/// The third bit tells us if we have numeric value - 0 or symbolic - 1
+			/// The remaining 5 bits are left for the operator
 			unsigned char flags;
 		};
 		/// Given operator stack and the pending operands. Pop the top most operator and create new node in the tree
@@ -97,22 +103,31 @@ namespace NSFem {
 			std::vector<Node>& tree
 		);
 		EC::ErrorCode evaluate(const std::unordered_map<char, float>* variables, float& outResult, const int index) const;
+		/// The tree of the expression is linearized into this array. The tree is represented in a "backwards" fashion.
+		/// The root of the expression tree is the last element in this array. Leaf nodes in the tree represent either
+		/// values or "variables" which must be substituted with values provided by the user during the evaluation.
+		/// Intermediate nodes represent unary or binary expression. If the expression is unary expression the operant
+		/// will always be at the previous index in the array. If the expression is binary the right hand side operand
+		/// will always be at the previous index in the array, while the left hand side operand can be at an arbitrary
+		/// position in the array, this position is stored in the node.
 		std::vector<Node> tree;
 	};
 
 	inline Expression::Node::Node(float v) :
 		value(v),
-		flags(0) {
-	}
+		flags(0) 
+	{ }
 
 	inline Expression::Node::Node(char name) :
 		variableName(name),
-		flags(0) {
+		flags(0) 
+	{
 		flags |= SymbolicValue;
 	}
 
 	inline Expression::Node::Node(Expression::Operator op) :
-		flags(0) {
+		flags(0) 
+	{
 		flags |= Intermediate;
 		flags |= static_cast<unsigned char>(op) << 3;
 	}
