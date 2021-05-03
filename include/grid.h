@@ -13,6 +13,47 @@ using real = double;
 /// All boundary nodes, with the conditions which will be imposed on the nodes.
 class FemGrid2D {
 public:
+    class VelocityDirichlet {
+    public:
+        friend class FemGrid2D;
+        VelocityDirichlet() = default;
+        /// Evaluate the boundary condition for the i-th node on the boundary- 1
+        /// @param[in] vars List of variables which take part in the expression for the boundary condition
+        /// @param[out] outU The result for the u component of the velocity on the boundary
+        /// @param[out] outv The result for the v component of the velocity on the boundary
+        void eval(const std::unordered_map<char, float>* vars, float& outU, float& outV) const;
+        /// Get the number of nodes which are included in the boundary
+        const int getSize() const;
+        /// Gives a list with the indexes of all nodes which are on the boundary
+        const int* getNodeIndexes() const;
+    private:
+        /// Indexes in in FemGrid2D::nodes to the nodes which are on the boundary
+        std::vector<int> nodeIndexes;
+        /// The boundary condition for the u component of the velocity
+        Expression u;
+        /// The boundary condition for the v component of the velocity
+        Expression v;
+    };
+
+    struct PressureDirichlet {
+    public:
+        friend class FemGrid2D;
+        PressureDirichlet() = default;
+        /// Evaluate the boundary condition for the i-th node on the boundary
+        /// @param[in] vars List of variables which take part in the expression for the boundary condition
+        /// The coordinates of the nodd (x, y) will be passed by the function internaly
+        /// @param[out] outP The result for the pressure on the bondary
+        void eval(const std::unordered_map<char, float>* vars, float& outP) const;
+        /// Get the number of nodes which are included in the boundary
+        const int getSize() const;
+        /// Gives a list with the indexes of all nodes which are on the boundary
+        const int* getNodeIndexes() const;
+    private:
+        /// Indexes in in FemGrid2D::nodes to the nodes which are on the boundary
+        std::vector<int> nodeIndexes;
+        /// The boundary condition for the pressure
+        Expression p;
+    };
     /// Return the number of nodes in the mesh
     const int getNodesCount() const;
     /// Return the number of elements in the mesh
@@ -36,6 +77,17 @@ public:
     /// @param[in] filePath Path the the mesh file
     /// @returns Status code: 0 on success
     int loadJSON(const char* filePath);
+    using VelocityDirichletConstIt = const VelocityDirichlet*;
+    /// Get the number of different boundaries where Dirichlet condition is imposed for the velocity
+    const int getVelocityDirichletSize() const;
+    /// Get iterator to all different boundaries where Dirichlet condition is imposed for the velocity
+    VelocityDirichletConstIt getVelocityDirichlet() const;
+
+    using PressureDirichletConstIt = const PressureDirichlet*;
+    /// Get the number of different boundaries where Dirichlet condition is imposed for the pressure
+    const int getPressureDirichletSize() const;
+    /// Get iterator to all different boundaries where Dirichlet condition is imposed for the pressure
+    PressureDirichletConstIt getPressureDirichlet() const;
 protected:
     /// List containing 2D coordinates for each node in the grid.
     std::vector<real> nodes;
@@ -48,20 +100,25 @@ protected:
     /// The nuber of nodes in the mesh
     int nodesCount;
 
-    struct VelocityDirichlet {
-        std::vector<int> nodeIndexes;
-        Expression u;
-        Expression v;
-    };
-
-    struct PressureDirichlet {
-        std::vector<int> nodeIndexes;
-        Expression p;
-    };
-
     std::vector<VelocityDirichlet> velocityDirichlet;
     std::vector<PressureDirichlet> pressureDirichlet;
 };
+
+inline const int FemGrid2D::getVelocityDirichletSize() const {
+    return velocityDirichlet.size();
+}
+
+inline FemGrid2D::VelocityDirichletConstIt FemGrid2D::getVelocityDirichlet() const {
+    return velocityDirichlet.data();
+}
+
+inline const int FemGrid2D::getPressureDirichletSize() const {
+    return pressureDirichlet.size();
+}
+/// Get iterator to all different boundaries where Dirichlet condition is imposed for the velocity
+inline FemGrid2D::PressureDirichletConstIt FemGrid2D::getPressureDirichlet() const {
+    return pressureDirichlet.data();
+}
 
 inline const int FemGrid2D::getNodesCount() const {
     return nodesCount;
@@ -77,6 +134,22 @@ inline void FemGrid2D::getElement(const int elementIndex, int* outElement, real*
         outNodes[2 * i] =  nodes[outElement[i] * 2];
         outNodes[2 * i + 1] =  nodes[outElement[i] * 2 + 1];
     }
+}
+
+inline const int FemGrid2D::VelocityDirichlet::getSize() const {
+    return nodeIndexes.size();
+}
+
+inline const int* FemGrid2D::VelocityDirichlet::getNodeIndexes() const {
+    return nodeIndexes.data();
+}
+
+inline const int FemGrid2D::PressureDirichlet::getSize() const {
+    return nodeIndexes.size();
+}
+
+inline const int* FemGrid2D::PressureDirichlet::getNodeIndexes() const {
+    return nodeIndexes.data();
 }
 
 }
