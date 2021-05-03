@@ -1,9 +1,9 @@
 #pragma once
 #include <vector>
 #include <cinttypes>
-#include <functional>
 #include <vector>
 #include <cstring>
+#include "expression.h"
 
 namespace NSFem {
 
@@ -47,6 +47,20 @@ protected:
     int elementSize;
     /// The nuber of nodes in the mesh
     int nodesCount;
+
+    struct VelocityDirichlet {
+        std::vector<int> nodeIndexes;
+        Expression u;
+        Expression v;
+    };
+
+    struct PressureDirichlet {
+        std::vector<int> nodeIndexes;
+        Expression p;
+    };
+
+    std::vector<VelocityDirichlet> velocityDirichlet;
+    std::vector<PressureDirichlet> pressureDirichlet;
 };
 
 inline const int FemGrid2D::getNodesCount() const {
