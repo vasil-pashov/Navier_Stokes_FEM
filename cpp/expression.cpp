@@ -335,7 +335,8 @@ EC::ErrorCode Expression::init(const char* expression) {
 	// (iii) The operator is open parentheses. In this case just add it to the stack
 	// (iv) The operator is close parentheses. We will form an expression tree with all operators and operands
 	// in the parentheses. That tree is going be added as e regular intermediate node in the expression tree.
-	for (int i = 0; i < tokens.size(); ++i) {
+	const int tokensSize = static_cast<int>(tokens.size());
+	for (int i = 0; i < tokensSize; ++i) {
 		const Token& t = tokens[i];
 		if (t.isOperator()) {
 			const Expression::Operator op = tokenToOperator(tokens, i);
@@ -347,7 +348,7 @@ EC::ErrorCode Expression::init(const char* expression) {
 			// what is in the () since they override precedence and then the result of what is in the () will be passed
 			// to the unary function
 			if (op == Expression::Operator::Sin || op == Expression::Operator::Cos) {
-				if (i >= tokens.size() || tokens[i + 1].t != Token::Type::OpenParen) {
+				if (i >= tokensSize || tokens[i + 1].t != Token::Type::OpenParen) {
 					return EC::ErrorCode(
 						"Error parsing expression: %s. Functions must be surrounded by ()",
 						expression

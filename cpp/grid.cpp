@@ -1,4 +1,4 @@
-#include "grid.h"
+#include <grid.h>
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <cassert>
@@ -22,11 +22,11 @@ int FemGrid2D::loadJSON(const char* filePath) {
         nodes.insert(nodes.end(), data["nodes"][i].begin(), data["nodes"][i].end());
     }
     for(int i = 0; i < elementsCount; ++i) {
-        assert(elementSize == data["elements"][i].size() && "Mismatch between declared element size and actual element size");
+        assert(elementSize == static_cast<int>(data["elements"][i].size()) && "Mismatch between declared element size and actual element size");
         elements.insert(elements.end(), data["elements"][i].begin(), data["elements"][i].end());
     }
-    assert(nodes.size() == nodesCount * 2);
-    assert(elements.size() == elementSize * elementsCount);
+    assert(static_cast<int>(nodes.size()) == nodesCount * 2);
+    assert(static_cast<int>(elements.size()) == elementSize * elementsCount);
 
     const int velocityDirichletSize = data["uDirichlet"].size();
     velocityDirichlet.resize(velocityDirichletSize);
