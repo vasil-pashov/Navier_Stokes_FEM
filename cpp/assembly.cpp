@@ -177,7 +177,7 @@ void integrateOverTriangle(const TFunctor& f, real* out) {
         1.0f/3.0f, 1.0f/3.0f
     };
 
-    real tmp[outSize];
+    real tmp[outSize] = {};
     for(int i = 0; i < numIntegrationPoints; ++i) {
         const real x = nodes[2 * i];
         const real y = nodes[2 * i + 1];
@@ -257,12 +257,71 @@ NavierStokesAssembly::NavierStokesAssembly(FemGrid2D&& grid, const real dt, cons
 
 }
 
-void NavierStokesAssembly::assemble() {
-    // assemblVelocityMassMatrix();
-    // assembleVelocityStiffnessMatrix();
-    // assembleConvectionMatrix();
+void NavierStokesAssembly::solve(const float totalTime) {
+    assembleConstantMatrices();
+    velocityStiffnessMatrix *= viscosity;
+    const int steps = totalTime / dt;
+    const int nodesCount = grid.getNodesCount();
+    currentVelocitySolution.init(nodesCount * 2, 0.0f);
+    SMM::Vector rhs(nodesCount * 2, 0.0f);
+    for(int i = 0; i < steps; ++i) {
+        // Convection is the convection matrix formed by (dot(u_h, del(fi_i)), fi_j) : forall i, j in 0...numVelocityNodes - 1
+        // Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
+        // components of the velocity, thus we will assemble it only once and use the same matrix to compute all velocity components.
+        // Used to compute the tentative velocity at step i + 1/2. The matrix depends on the current solution for the velocity, thus it
+        // changes over time and must be reevaluated at each step.
+        // TODO: Do not allocate space on each iteration, but reuse the matrix sparse structure
+        SMM::CSRMatrix convectionMatrix;
+        assembleConvectionMatrix(convectionMatrix);
+        convectionMatrix.inplaceAdd(velocityStiffnessMatrix);
+        assert(convectionMatrix.hasSameNonZeroPattern(velocityMassMatrix));
+        SMM::CSRMatrix::ConstIterator convectionIt = convectionMatrix.begin();
+        SMM::CSRMatrix::ConstIterator massIt = velocityMassMatrix.begin();
+        for(;convectionIt != convectionMatrix.end() && massIt != velocityMassMatrix.end(); ++convectionIt, ++massIt) {
+            const int row = convectionIt->getRow();
+            const int col = convectionIt->getCol();
+            const real uVal = currentVelocitySolution[col];
+            const real vVal = currentVelocitySolution[col + nodesCount];
+            rhs[row] += (massIt->getValue() - dt * convectionIt->getValue()) * uVal;
+            rhs[row + nodesCount] += (massIt->getValue() - dt * convectionIt->getValue()) * vVal;
+        }
+        SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
+
+        // Solve for the u component
+        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs, currentVelocitySolution, 100, 1e-6);
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+
+        // Solve for the v component
+        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs + nodesCount, currentVelocitySolution + nodesCount, 100, 1e-6);
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+
+        // Impose boundary condition on the tenative velocity.
+        const int velocityDirichletCount = grid.getVelocityDirichletSize();
+        FemGrid2D::VelocityDirichletConstIt velocityDirichletBoundaries = grid.getVelocityDirichlet();
+        for(int boundaryIndex = 0; boundaryIndex < velocityDirichletCount; ++boundaryIndex) {
+            const FemGrid2D::VelocityDirichlet& boundary = velocityDirichletBoundaries[boundaryIndex];
+            std::unordered_map<char, float> variables;
+            for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+                const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+                const real x = grid.getNodesBuffer()[nodeIndex * 2];
+                const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+                variables['x'] = x;
+                variables['y'] = y;
+                float uBoundary = 0, vBoundary = 0;
+                boundary.eval(&variables, uBoundary, vBoundary);
+                currentVelocitySolution[nodeIndex] = uBoundary;
+                currentVelocitySolution[nodeIndex + nodesCount] = vBoundary;
+            }
+        }
+
+        int a = 5;
+    }
+}
+
+void NavierStokesAssembly::assembleConstantMatrices() {
+    assemblVelocityMassMatrix();
+    assembleVelocityStiffnessMatrix();
     assembleDivergenceMatrix();
-    SMM::saveDenseText("/home/vasil/Documents/FMI/Магистратура/Дипломна/CPP/div_u.txt", divergenceMatrix);
 }
 
 void NavierStokesAssembly::assemblVelocityMassMatrix() {
@@ -313,7 +372,7 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
     const int p2Size = 6;
     const int delP2Size = p2Size * 2;
     // Compute the integral of each pair shape function derivatives.
-    const auto squareDelP = [delP2Size](const real xi, const real eta, real* out) -> void{
+    const auto squareDelP = [](const real xi, const real eta, real* out) -> void{
         real delP2[delP2Size] = {};
         delP2Shape(xi, eta, delP2);
         for(int i = 0; i < delP2Size; ++i) {
@@ -358,10 +417,10 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
         }
     };
 
-    assembleMatrix<decltype(localStiffness), p2Size, p2Size>(localStiffness, stiffnessMatrix);
+    assembleMatrix<decltype(localStiffness), p2Size, p2Size>(localStiffness, velocityStiffnessMatrix);
 }
 
-void NavierStokesAssembly::assembleConvectionMatrix() {
+void NavierStokesAssembly::assembleConvectionMatrix(SMM::CSRMatrix& convectionMatrix) {
     const int p2Size = 6;
     const int nodesCount = grid.getNodesCount();
     const auto localConvection = [&](const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
@@ -377,11 +436,11 @@ void NavierStokesAssembly::assembleConvectionMatrix() {
         StaticMatrix<real, 2, 2> B;
         differentialOperator(elementNodes, J, B);
         const int sign = J > 0 ? 1 : -1;
-
         // The local convection matrix is of the form Integrate(Transpose(PSI(xi, eta)).PSI(xi, eta).UV.B.DPSI(xi, eta) * dxi * deta)
-        // This lambda is the function which is being integrated, it's later passed to integrate over triangle to get the localMatrix
-        const auto convectionIntegrant = [&](const real xi, const real eta, real* out) -> void {
+        // This functor is the function which is being integrated, it's later passed to integrate over triangle to get the localMatrix
+        const auto convectionIntegrant = [&](const real xi, const real eta, real* outIntegrated) -> void {
             // TODO: p2Shape and delP2Shape can be cached for various xi and eta used by the integrator
+            const int p2Size = 6;
             StaticMatrix<real, 1, p2Size> psi;
             p2Shape(xi, eta, psi.data());
 
@@ -389,9 +448,14 @@ void NavierStokesAssembly::assembleConvectionMatrix() {
             delP2Shape(xi, eta, psi.data());
 
             StaticMatrix<real, p2Size, p2Size> result = (psi.getTransposed() * psi * velocity * B * delPsi) * sign;
-            memcpy(out, result.data(), sizeof(real) * result.getRows() * result.getCols());
+            for(int i = 0; i < result.getRows(); ++i) {
+                for(int j = 0; j < result.getCols(); ++j) {
+                    const int index = linearize2DIndex(result.getCols(), i, j);
+                    outIntegrated[index] = result[i][j];
+                }
+            }
         };
-        integrateOverTriangle<p2Size * p2Size>(convectionIntegrant, reinterpret_cast<real*>(localMatrixOut));
+        integrateOverTriangle<p2Size * p2Size>(convectionIntegrant, (real*)(&localMatrixOut[0][0]));
     };
 
     assembleMatrix<decltype(localConvection), p2Size, p2Size>(localConvection, convectionMatrix);

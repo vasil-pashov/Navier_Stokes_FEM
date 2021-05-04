@@ -70,4 +70,20 @@ int FemGrid2D::loadJSON(const char* filePath) {
     return 0;
 }
 
+void FemGrid2D::VelocityDirichlet::eval(
+    const std::unordered_map<char, float>* variables,
+    float& outU,
+    float& outV
+) const {
+    u.evaluate(variables, outU);
+    v.evaluate(variables, outV);
+}
+
+void FemGrid2D::PressureDirichlet::eval(
+    const std::unordered_map<char, float>* variables,
+    float& outP
+) const {
+    p.evaluate(variables, outP);
+}
+
 }

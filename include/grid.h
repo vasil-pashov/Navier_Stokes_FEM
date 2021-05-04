@@ -124,6 +124,10 @@ inline const int FemGrid2D::getNodesCount() const {
     return nodesCount;
 }
 
+inline const real* FemGrid2D::getNodesBuffer() const {
+    return nodes.data();
+}
+
 inline const int FemGrid2D::getElementsCount() const {
     return elementsCount;
 }

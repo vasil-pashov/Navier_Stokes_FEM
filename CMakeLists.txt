@@ -39,6 +39,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE include)
 target_link_libraries(${PROJECT_NAME} INTERFACE sparse_matrix_math::sparse_matrix_math cpp_tm::cpp_tm)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
 
+if(NOT MSVC)
+	target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -pedantic)
+endif()
+
 if(${WITH_GBENCH})
 	find_package(benchmark REQUIRED CONFIG)
 	target_link_libraries(${PROJECT_NAME} PRIVATE benchmark::benchmark)
