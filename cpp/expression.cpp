@@ -44,10 +44,6 @@ struct Token {
 	Type t;
 };
 
-EC::ErrorCode Expression::init(const char* expression) {
-	return init(expression, strlen(expression));
-}
-
 const inline static Expression::Operator tokenToOperator(const std::vector<Token>& tokens, const int tokenIndex) {
 	const Token::Type t = tokens[tokenIndex].t;
 	switch (t) {
@@ -310,7 +306,7 @@ EC::ErrorCode Expression::popOperators(
 	return EC::ErrorCode();
 }
 
-EC::ErrorCode Expression::init(const char* expression, const int length) {
+EC::ErrorCode Expression::init(const char* expression) {
 	// This is a stack to hold the operands which are to be combined in an expression
 	// An operand is any node in the expression tree. If the node is a leaf then the
 	// value of the operand is the value held in that leaf, if the node not a leaf then

@@ -30,7 +30,6 @@ namespace NSFem {
 		Expression& operator=(Expression&&) = default;
 		Expression(const Expression&) = delete;
 		Expression& operator=(const Expression&) = delete;
-		EC::ErrorCode init(const char* expression, const int length);
 		EC::ErrorCode init(const char* expression);
 		/// Evaluate the expression.
 		/// @param[in] variables Map which holds key-value pairs between all variables in the expression

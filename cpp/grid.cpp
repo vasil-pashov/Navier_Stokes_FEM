@@ -39,12 +39,12 @@ int FemGrid2D::loadJSON(const char* filePath) {
         );
         const std::string& u = data["uDirichlet"][i]["u"];
         const std::string& v = data["uDirichlet"][i]["v"];
-        error = velocityDirichlet[i].u.init(u.c_str(), u.size());
+        error = velocityDirichlet[i].u.init(u.c_str());
         if(error.hasError()) {
             assert(false);
             return 1;
         }
-        error = velocityDirichlet[i].v.init(v.c_str(), v.size());
+        error = velocityDirichlet[i].v.init(v.c_str());
         if(error.hasError()) {
             assert(false);
             return 1;
@@ -60,7 +60,7 @@ int FemGrid2D::loadJSON(const char* filePath) {
             data["pDirichlet"][i]["nodes"].end()
         );
         const std::string& p = data["pDirichlet"][i]["p"];
-        error = pressureDirichlet[i].p.init(p.c_str(), p.size());
+        error = pressureDirichlet[i].p.init(p.c_str());
         if(error.hasError()) {
             assert(false);
             return 1;
