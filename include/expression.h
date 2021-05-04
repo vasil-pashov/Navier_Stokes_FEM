@@ -56,25 +56,25 @@ namespace NSFem {
 			Node(int leftIndex, Expression::Operator op);
 			/// Check if node is a leaf
 			/// @retval 1 - if it is a leaf 0 - otherwise
-			const bool isLeaf() const;
+			bool isLeaf() const;
 			/// For intermediate node return the number of arguments
 			/// @retval 1 for unary operators 2 for binary operators
-			const uint8_t getNumberOfArguments() const;
+			uint8_t getNumberOfArguments() const;
 			/// For a leaf check if it is symbolic
 			/// @retval 1 if the leaf is symbolic variable 0 if it numeric variable
-			const bool isSymbolic() const;
+			bool isSymbolic() const;
 			/// For an intermediate leaf get the operator
 			/// @retval Operator code for the operator
-			const Expression::Operator getOperator() const;
+			Expression::Operator getOperator() const;
 			/// For an intermediate node get the index of the left operand
 			/// @retval index of the left operand in the tree which is represented as an array
-			const int getLeftIndex() const;
+			int getLeftIndex() const;
 			/// For a numeric leaf get the value in the leaf. One must check beforehand if it is numeric leaf.
 			/// @retval the value in the leaf as float
-			const float getValue() const;
+			float getValue() const;
 			/// For a symbolic leaf get the name of the variable. One must check beforehand if it is symbolic leaf.
 			/// @retval The name of the symbolic variable in the leaf
-			const char getName() const;
+			char getName() const;
 		private:
 			enum Flags {
 				Leaf = 0,
@@ -140,35 +140,35 @@ namespace NSFem {
 		flags |= static_cast<unsigned char>(op) << 3;
 	}
 
-	inline const bool Expression::Node::isLeaf() const {
+	inline bool Expression::Node::isLeaf() const {
 		return (flags & 1) == 0;
 	}
 
-	inline const uint8_t Expression::Node::getNumberOfArguments() const {
+	inline uint8_t Expression::Node::getNumberOfArguments() const {
 		assert(!isLeaf());
 		return (flags & TwoOperands) != 0 ? 2 : 1;
 	}
 
-	inline const bool Expression::Node::isSymbolic() const {
+	inline bool Expression::Node::isSymbolic() const {
 		return (flags & SymbolicValue) != 0;
 	}
 
-	inline const Expression::Operator Expression::Node::getOperator() const {
+	inline Expression::Operator Expression::Node::getOperator() const {
 		assert(!isLeaf());
 		return Expression::Operator(flags >> 3);
 	}
 
-	inline const int Expression::Node::getLeftIndex() const {
+	inline int Expression::Node::getLeftIndex() const {
 		assert(!isLeaf());
 		return leftIndex;
 	}
 
-	inline const float Expression::Node::getValue() const {
+	inline float Expression::Node::getValue() const {
 		assert(isLeaf());
 		return value;
 	}
 
-	inline const char Expression::Node::getName() const {
+	inline char Expression::Node::getName() const {
 		assert(isSymbolic());
 		return variableName;
 	}

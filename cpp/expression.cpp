@@ -21,7 +21,7 @@ struct Token {
 		OpenParen,
 		CloseParen
 	};
-	const bool isOperator() const {
+	bool isOperator() const {
 		switch (t) {
 			case Type::Plus:
 			case Type::Minus:
@@ -44,7 +44,7 @@ struct Token {
 	Type t;
 };
 
-const inline static Expression::Operator tokenToOperator(const std::vector<Token>& tokens, const int tokenIndex) {
+inline static Expression::Operator tokenToOperator(const std::vector<Token>& tokens, const int tokenIndex) {
 	const Token::Type t = tokens[tokenIndex].t;
 	switch (t) {
 		case Token::Type::Plus : return Expression::Operator::Plus;
@@ -108,7 +108,7 @@ inline static float evaluateOperator(const Expression::Operator op, const float 
 
 /// Given operator return the number of operand it needs
 /// @retval -1 if wrong op is passed, 1 for unary operators, 2 for binary operators
-inline static const int8_t getNumOperatorArgs(const Expression::Operator op) {
+inline static int8_t getNumOperatorArgs(const Expression::Operator op) {
 	switch (op) {
 		case Expression::Operator::Plus:
 		case Expression::Operator::Minus:
@@ -131,7 +131,7 @@ inline static const int8_t getNumOperatorArgs(const Expression::Operator op) {
 /// @param[in] start The string where we look for operators
 /// @param[out] len The length of the operator string if no operator is found it will be 0
 /// @retval Expression::Operator::Invalid if no operator is found otherwise Expression::Operator value for the operator
-inline static const Token::Type parseOperator(const char* start, int& len) {
+inline static Token::Type parseOperator(const char* start, int& len) {
 	const char c = start[0];
 	if (c == '+') {
 		len = 1;
@@ -169,7 +169,7 @@ inline static const Token::Type parseOperator(const char* start, int& len) {
 /// @param[in] start The string where we look for variables
 /// @param[out] len The length of the variable. If no variable is found this will be 0
 /// @retval 1 if variable name is found 0 otherwise
-inline static const bool parseVariable(const char* start, int& len) {
+inline static bool parseVariable(const char* start, int& len) {
 	if (*start == 'x' || *start == 'y' || *start == 'z' || *start == 't') {
 		len = 1;
 		return true;
@@ -182,7 +182,7 @@ inline static const bool parseVariable(const char* start, int& len) {
 /// @param[in] start The string where we look for constants
 /// @param[out] len The length of the constant if no constant is found it will be 0
 /// @retval 0 if no constant is found, otherwise the value of the found constant
-inline static const float parseConstant(const char* start, int& len) {
+inline static float parseConstant(const char* start, int& len) {
 	if (start[0] == 'E') {
 		len = 1;
 		return M_E;
@@ -194,7 +194,7 @@ inline static const float parseConstant(const char* start, int& len) {
 	return 0;
 }
 
-inline static const int getOperatorPrecedence(Expression::Operator op) {
+inline static int getOperatorPrecedence(Expression::Operator op) {
 	switch (op) {
 		case Expression::Operator::Plus:
 		case Expression::Operator::Minus:
@@ -220,7 +220,7 @@ inline static const int getOperatorPrecedence(Expression::Operator op) {
 /// @param[in] stack The stack where the operator is going to be pushed
 /// @param[in] current The operator for which we check if poping is needed
 /// @retval 1 if we need to pop operators before pushing current to the stack, 0 if we don't need to pop
-inline static const bool shouldPop(const std::vector<Expression::Operator>& stack, const Expression::Operator current) {
+inline static bool shouldPop(const std::vector<Expression::Operator>& stack, const Expression::Operator current) {
 	if (stack.empty()) return false;
 	const int topPrecedence = getOperatorPrecedence(stack.back());
 	const int currentPrecendece = getOperatorPrecedence(current);

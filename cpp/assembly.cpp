@@ -96,7 +96,7 @@ inline void p1Shape(const real xi, const real eta, real out[3]) {
 /// @param[in] eta - Coordinate in the (transformed) unit triangle anong the eta (aka y) axis
 /// @param[out] out - This will hold the gradient. The first 3 elements are the derivatives of the shape functions with
 ///< respect to xi, next 3 elements are the derivatives of the shape functions with respect to eta
-inline void delP1Shape(const real xi, const real eta, real out[2][3]) {
+inline void delP1Shape([[maybe_unused]]const real xi, [[maybe_unused]]const real eta, real out[2][3]) {
     // dpsi/dxi
     out[0][0] = -1.0f;
     out[0][1] = 1.0f;
@@ -251,8 +251,8 @@ inline constexpr int linearize2DIndex(const int numCols, const int row, const in
 
 NavierStokesAssembly::NavierStokesAssembly(FemGrid2D&& grid, const real dt, const real viscosity) :
     grid(std::move(grid)),
-    dt(dt),
-    viscosity(viscosity)
+    viscosity(viscosity),
+    dt(dt)
 {
 
 }
@@ -313,8 +313,6 @@ void NavierStokesAssembly::solve(const float totalTime) {
                 currentVelocitySolution[nodeIndex + nodesCount] = vBoundary;
             }
         }
-
-        int a = 5;
     }
 }
 
@@ -335,7 +333,7 @@ void NavierStokesAssembly::assemblVelocityMassMatrix() {
     const int p2Size = 6;
     // This will hold the result of integral(psi_i(xi, eta) * psi_j(xi, eta) dxi * deta)
     real p2Squared[p2Size][p2Size] = {};
-    const auto squareP2 = [p2Size](const real xi, const real eta, real* out) -> void {
+    const auto squareP2 = [](const real xi, const real eta, real* out) -> void {
         real p2Res[p2Size];
         p2Shape(xi, eta, p2Res);
         for(int i = 0; i < p2Size; ++i) {
@@ -348,7 +346,7 @@ void NavierStokesAssembly::assemblVelocityMassMatrix() {
     integrateOverTriangle<p2Size * p2Size>(squareP2, reinterpret_cast<real*>(p2Squared));
 
     // Lambda wich takes advantage of precomputed shape function integral
-    const auto localMass = [&p2Squared, p2Size](const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
+    const auto localMass = [&p2Squared]([[maybe_unused]]const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
         const real jDetAbs = std::abs(linTriangleTmJacobian(elementNodes));
         for(int i = 0; i < p2Size; ++i) {
             for(int j = 0; j < p2Size; ++j) {
@@ -385,7 +383,7 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
     real delPSq[delP2Size][delP2Size] = {};
     integrateOverTriangle<delP2Size * delP2Size>(squareDelP, reinterpret_cast<real*>(delPSq));
 
-    const auto localStiffness = [&delPSq, p2Size](const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
+    const auto localStiffness = [&delPSq]([[maybe_unused]]const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
         real b[2][2];
         real J;
         differentialOperator(elementNodes, J, b);
