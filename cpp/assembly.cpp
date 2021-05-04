@@ -158,23 +158,25 @@ inline void delP2Shape(const real xi, const real eta, real out[12]) {
 /// of reals where the result of the functor at (xi, eta) will be returned
 /// @tparam outSize The size of the otput parameter of TFunctor
 /// @param[in] f Vector function of two arguments which will be integrated over the unit triangle.
-/// @param[out] out Result from integrating f over the unit triangle (must of of size outSize)
+/// @param[out] out Result from integrating f over the unit triangle (must of size outSize)
+/// The out array must be contain only zeroes when passed to this function
 template<int outSize, typename TFunctor>
 void integrateOverTriangle(const TFunctor& f, real* out) {
+    assert(std::all_of(out, out + outSize, [](const real x){return x == real(0);}));
     const int numIntegrationPoints = 8;
     const real weights[numIntegrationPoints] = {
-        3.0f / 120.0f, 3.0f / 120.0f, 3.0f / 120.0f,
-        8.0f / 120.0f, 8.0f / 120.0f, 8.0f / 120.0f,
-        27.0f / 120.0f
+        3.0 / 120.0, 3.0 / 120.0, 3.0 / 120.0,
+        8.0 / 120.0, 8.0 / 120.0, 8.0 / 120.0,
+        27.0 / 120.0
     };
     const real nodes[2 * numIntegrationPoints] = {
-        0.0f, 0.0f,
-        1.0f, 0.0f,
-        0.0f, 1.0f,
-        0.5f, 0.0f,
-        0.5f, 0.5f,
-        0.0f, 0.5f,
-        1.0f/3.0f, 1.0f/3.0f
+        0.0, 0.0,
+        1.0, 0.0,
+        0.0, 1.0,
+        0.5, 0.0,
+        0.5, 0.5,
+        0.0, 0.5,
+        1.0/3.0, 1.0/3.0
     };
 
     real tmp[outSize] = {};
@@ -225,7 +227,7 @@ inline void differentialOperator(const real* nodes, real& outDetJ, TMatrix& outB
 /// Find the determinant of the Jacobi matrix for a linear transformation of random triangle to the unit one
 /// @param[in] kx World x coordinate of the node which will be transformed to (0, 0)
 /// @param[in] ky World y coordinate of the node which will be transformed to (0, 0)
-/// @param[in] lx World x coordinates of the node which will be transformed to (1integrateOverTriangle, 1)
+/// @param[in] lx World x coordinates of the node which will be transformed to (1, 1)
 /// @param[in] my World y coordinates of the node which will be transformed to (0, 1)
 /// @return The determinant of the Jacobi matrix which transforms k, l, m to the unit triangle
 inline real linTriangleTmJacobian(const real* elementNodes) {
@@ -263,6 +265,7 @@ void NavierStokesAssembly::solve(const float totalTime) {
     const int steps = totalTime / dt;
     const int nodesCount = grid.getNodesCount();
     currentVelocitySolution.init(nodesCount * 2, 0.0f);
+    imposeVelocityDirichlet(currentVelocitySolution);
     SMM::Vector rhs(nodesCount * 2, 0.0f);
     for(int i = 0; i < steps; ++i) {
         // Convection is the convection matrix formed by (dot(u_h, del(fi_i)), fi_j) : forall i, j in 0...numVelocityNodes - 1
@@ -288,33 +291,39 @@ void NavierStokesAssembly::solve(const float totalTime) {
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
 
         // Solve for the u component
-        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs, currentVelocitySolution, 100, 1e-6);
+        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs, currentVelocitySolution, -1, 1e-6);
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
         // Solve for the v component
-        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs + nodesCount, currentVelocitySolution + nodesCount, 100, 1e-6);
+        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs + nodesCount, currentVelocitySolution + nodesCount, -1, 1e-6);
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
-        // Impose boundary condition on the tenative velocity.
-        const int velocityDirichletCount = grid.getVelocityDirichletSize();
-        FemGrid2D::VelocityDirichletConstIt velocityDirichletBoundaries = grid.getVelocityDirichlet();
-        for(int boundaryIndex = 0; boundaryIndex < velocityDirichletCount; ++boundaryIndex) {
-            const FemGrid2D::VelocityDirichlet& boundary = velocityDirichletBoundaries[boundaryIndex];
-            std::unordered_map<char, float> variables;
-            for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
-                const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
-                const real x = grid.getNodesBuffer()[nodeIndex * 2];
-                const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
-                variables['x'] = x;
-                variables['y'] = y;
-                float uBoundary = 0, vBoundary = 0;
-                boundary.eval(&variables, uBoundary, vBoundary);
-                currentVelocitySolution[nodeIndex] = uBoundary;
-                currentVelocitySolution[nodeIndex + nodesCount] = vBoundary;
-            }
+        imposeVelocityDirichlet(currentVelocitySolution);
+
+    }
+}
+
+void NavierStokesAssembly::imposeVelocityDirichlet(SMM::Vector& velocityVector) {
+    const int nodesCount = grid.getNodesCount();
+    const int velocityDirichletCount = grid.getVelocityDirichletSize();
+    FemGrid2D::VelocityDirichletConstIt velocityDirichletBoundaries = grid.getVelocityDirichlet();
+    for(int boundaryIndex = 0; boundaryIndex < velocityDirichletCount; ++boundaryIndex) {
+        const FemGrid2D::VelocityDirichlet& boundary = velocityDirichletBoundaries[boundaryIndex];
+        std::unordered_map<char, float> variables;
+        for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+            const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+            const real x = grid.getNodesBuffer()[nodeIndex * 2];
+            const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+            variables['x'] = x;
+            variables['y'] = y;
+            float uBoundary = 0, vBoundary = 0;
+            boundary.eval(&variables, uBoundary, vBoundary);
+            velocityVector[nodeIndex] = uBoundary;
+            velocityVector[nodeIndex + nodesCount] = vBoundary;
         }
     }
 }
+
 
 void NavierStokesAssembly::assembleConstantMatrices() {
     assemblVelocityMassMatrix();
@@ -433,7 +442,7 @@ void NavierStokesAssembly::assembleConvectionMatrix(SMM::CSRMatrix& convectionMa
         real J;
         StaticMatrix<real, 2, 2> B;
         differentialOperator(elementNodes, J, B);
-        const int sign = J > 0 ? 1 : -1;
+        const real sign = J > 0 ? real(1) : real(-1);
         // The local convection matrix is of the form Integrate(Transpose(PSI(xi, eta)).PSI(xi, eta).UV.B.DPSI(xi, eta) * dxi * deta)
         // This functor is the function which is being integrated, it's later passed to integrate over triangle to get the localMatrix
         const auto convectionIntegrant = [&](const real xi, const real eta, real* outIntegrated) -> void {
@@ -444,16 +453,12 @@ void NavierStokesAssembly::assembleConvectionMatrix(SMM::CSRMatrix& convectionMa
 
             StaticMatrix<real, 2, p2Size> delPsi;
             delP2Shape(xi, eta, delPsi.data());
-
+            
             StaticMatrix<real, p2Size, p2Size> result = (psi.getTransposed() * psi * velocity * B * delPsi) * sign;
-            for(int i = 0; i < result.getRows(); ++i) {
-                for(int j = 0; j < result.getCols(); ++j) {
-                    const int index = linearize2DIndex(result.getCols(), i, j);
-                    outIntegrated[index] = result[i][j];
-                }
-            }
+            memcpy(outIntegrated, result.data(), sizeof(real) * p2Size * p2Size);
         };
-        integrateOverTriangle<p2Size * p2Size>(convectionIntegrant, (real*)(&localMatrixOut[0][0]));
+        std::fill_n(reinterpret_cast<real*>(localMatrixOut), p2Size * p2Size, real(0));
+        integrateOverTriangle<p2Size * p2Size>(convectionIntegrant, reinterpret_cast<real*>(localMatrixOut));
     };
 
     assembleMatrix<decltype(localConvection), p2Size, p2Size>(localConvection, convectionMatrix);

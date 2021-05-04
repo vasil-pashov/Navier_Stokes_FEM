@@ -68,6 +68,12 @@ private:
     /// matrix.
     void assembleDivergenceMatrix();
 
+    /// Impose Dirichlet Boundary conditions on the velocity vector passed as an input
+    /// @param[in, out] velocityVector Velocity vector where the Dirichlet BC will be imposed
+    /// The vector must have all its u-velocity components at the begining, followed by all
+    /// v-velocity components.
+    void imposeVelocityDirichlet(SMM::Vector& velocityVector);
+
     /// Viscosity of the fluid
     real viscosity;
     /// Size of the time step used when approximating derivatives with respect to time
