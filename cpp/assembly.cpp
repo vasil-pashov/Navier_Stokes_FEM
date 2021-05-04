@@ -443,7 +443,7 @@ void NavierStokesAssembly::assembleConvectionMatrix(SMM::CSRMatrix& convectionMa
             p2Shape(xi, eta, psi.data());
 
             StaticMatrix<real, 2, p2Size> delPsi;
-            delP2Shape(xi, eta, psi.data());
+            delP2Shape(xi, eta, delPsi.data());
 
             StaticMatrix<real, p2Size, p2Size> result = (psi.getTransposed() * psi * velocity * B * delPsi) * sign;
             for(int i = 0; i < result.getRows(); ++i) {
