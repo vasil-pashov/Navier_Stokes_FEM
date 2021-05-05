@@ -226,21 +226,29 @@ private:
     /// Function which wraps the assembling of all constant matrices. These matrices will stay the same
     /// during the whole solving phase. This function must be called once before we start time iterations.
     void assembleConstantMatrices();
+
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
+
     /// Mass matrix for the velocity formed by (fi_i, fi_j) : forall i, j in 0...numVelocityNodes - 1
     /// Where fi_i is the i-th velocity basis function. This matrix is the same for the u and v components of the velocity,
     /// thus we will assemble it only once and use the same matrix to compute all velocity components.
     /// Used to compute the tentative velocity at step i + 1/2. This matrix is constant for the given mesh and does not change
     /// when the time changes.
     SMM::CSRMatrix velocityMassMatrix;
+
     /// Stiffness matrix for the velocity formed by (del(fi_i), del(fi_j)) : forall i, j in 0...numVelocityNodes - 1
     /// Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
     /// components of the velocity, thus we will assemble it only once and use the same matrix to compute all velocity components.
     /// Used to compute the tentative velocity at step i + 1/2. This matrix is constant for the given mesh and does not change
     /// when the time changes.
     SMM::CSRMatrix velocityStiffnessMatrix;
+
+    /// Stiffness matrix for the velocity formed by (del(fi_i), del(fi_j)) : forall i, j in 0...numPressureNodes - 1
+    /// Where fi_i is the i-th pressure basis function. This matrix is constant for the given mesh and does not change
+    /// when the time changes.
     SMM::CSRMatrix pressureShapeMatrix;
+
     /// Divergence matrices formed by (dfi_i/dx, chi_j) and (dfi_i/dy, chi_j) : forall i in numVelocityNodes - 1, j in 0...numPressureNodes - 1
     /// Where fi_i is the i-th velocity basis function and chi_j is the j-th pressure basis function
     /// These are used when pressure is found from the tentative velocity. These matrices are constant for the given mesh and do not change
@@ -292,6 +300,7 @@ private:
 
     /// Viscosity of the fluid
     real viscosity;
+    
     /// Size of the time step used when approximating derivatives with respect to time
     real dt;
 };
