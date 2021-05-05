@@ -96,7 +96,7 @@ inline void p1Shape(const real xi, const real eta, real out[3]) {
 /// @param[in] eta - Coordinate in the (transformed) unit triangle anong the eta (aka y) axis
 /// @param[out] out - This will hold the gradient. The first 3 elements are the derivatives of the shape functions with
 ///< respect to xi, next 3 elements are the derivatives of the shape functions with respect to eta
-inline void delP1Shape(const real xi, const real eta, real out[2][3]) {
+inline void delP1Shape([[maybe_unused]]const real xi, [[maybe_unused]]const real eta, real out[2][3]) {
     // dpsi/dxi
     out[0][0] = -1.0f;
     out[0][1] = 1.0f;
@@ -158,26 +158,28 @@ inline void delP2Shape(const real xi, const real eta, real out[12]) {
 /// of reals where the result of the functor at (xi, eta) will be returned
 /// @tparam outSize The size of the otput parameter of TFunctor
 /// @param[in] f Vector function of two arguments which will be integrated over the unit triangle.
-/// @param[out] out Result from integrating f over the unit triangle (must of of size outSize)
+/// @param[out] out Result from integrating f over the unit triangle (must of size outSize)
+/// The out array must be contain only zeroes when passed to this function
 template<int outSize, typename TFunctor>
 void integrateOverTriangle(const TFunctor& f, real* out) {
+    assert(std::all_of(out, out + outSize, [](const real x){return x == real(0);}));
     const int numIntegrationPoints = 8;
     const real weights[numIntegrationPoints] = {
-        3.0f / 120.0f, 3.0f / 120.0f, 3.0f / 120.0f,
-        8.0f / 120.0f, 8.0f / 120.0f, 8.0f / 120.0f,
-        27.0f / 120.0f
+        3.0 / 120.0, 3.0 / 120.0, 3.0 / 120.0,
+        8.0 / 120.0, 8.0 / 120.0, 8.0 / 120.0,
+        27.0 / 120.0
     };
     const real nodes[2 * numIntegrationPoints] = {
-        0.0f, 0.0f,
-        1.0f, 0.0f,
-        0.0f, 1.0f,
-        0.5f, 0.0f,
-        0.5f, 0.5f,
-        0.0f, 0.5f,
-        1.0f/3.0f, 1.0f/3.0f
+        0.0, 0.0,
+        1.0, 0.0,
+        0.0, 1.0,
+        0.5, 0.0,
+        0.5, 0.5,
+        0.0, 0.5,
+        1.0/3.0, 1.0/3.0
     };
 
-    real tmp[outSize];
+    real tmp[outSize] = {};
     for(int i = 0; i < numIntegrationPoints; ++i) {
         const real x = nodes[2 * i];
         const real y = nodes[2 * i + 1];
@@ -225,7 +227,7 @@ inline void differentialOperator(const real* nodes, real& outDetJ, TMatrix& outB
 /// Find the determinant of the Jacobi matrix for a linear transformation of random triangle to the unit one
 /// @param[in] kx World x coordinate of the node which will be transformed to (0, 0)
 /// @param[in] ky World y coordinate of the node which will be transformed to (0, 0)
-/// @param[in] lx World x coordinates of the node which will be transformed to (1integrateOverTriangle, 1)
+/// @param[in] lx World x coordinates of the node which will be transformed to (1, 1)
 /// @param[in] my World y coordinates of the node which will be transformed to (0, 1)
 /// @return The determinant of the Jacobi matrix which transforms k, l, m to the unit triangle
 inline real linTriangleTmJacobian(const real* elementNodes) {
@@ -251,18 +253,84 @@ inline constexpr int linearize2DIndex(const int numCols, const int row, const in
 
 NavierStokesAssembly::NavierStokesAssembly(FemGrid2D&& grid, const real dt, const real viscosity) :
     grid(std::move(grid)),
-    dt(dt),
-    viscosity(viscosity)
+    viscosity(viscosity),
+    dt(dt)
 {
 
 }
 
-void NavierStokesAssembly::assemble() {
-    // assemblVelocityMassMatrix();
-    // assembleVelocityStiffnessMatrix();
-    // assembleConvectionMatrix();
+void NavierStokesAssembly::solve(const float totalTime) {
+    assembleConstantMatrices();
+    velocityStiffnessMatrix *= viscosity;
+    const int steps = totalTime / dt;
+    const int nodesCount = grid.getNodesCount();
+    currentVelocitySolution.init(nodesCount * 2, 0.0f);
+    imposeVelocityDirichlet(currentVelocitySolution);
+    SMM::Vector rhs(nodesCount * 2, 0.0f);
+    for(int i = 0; i < steps; ++i) {
+        // Convection is the convection matrix formed by (dot(u_h, del(fi_i)), fi_j) : forall i, j in 0...numVelocityNodes - 1
+        // Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
+        // components of the velocity, thus we will assemble it only once and use the same matrix to compute all velocity components.
+        // Used to compute the tentative velocity at step i + 1/2. The matrix depends on the current solution for the velocity, thus it
+        // changes over time and must be reevaluated at each step.
+        // TODO: Do not allocate space on each iteration, but reuse the matrix sparse structure
+        SMM::CSRMatrix convectionMatrix;
+        assembleConvectionMatrix(convectionMatrix);
+        assert(convectionMatrix.hasSameNonZeroPattern(velocityMassMatrix));
+        SMM::CSRMatrix::ConstIterator convectionIt = convectionMatrix.begin();
+        SMM::CSRMatrix::ConstIterator massIt = velocityMassMatrix.begin();
+        SMM::CSRMatrix::ConstIterator velStiffnessIt = velocityStiffnessMatrix.begin();
+        // TODO: The expression for the right-hand side in matrix form is: velocityMass - dt * (viscosity * velocityStiffness + convection)
+        // velocity mass and velocity stifness are constant matrices. They can be combined before the iterations start.
+        for(;convectionIt != convectionMatrix.end(); ++convectionIt, ++massIt, ++velStiffnessIt) {
+            const int row = convectionIt->getRow();
+            const int col = convectionIt->getCol();
+            const real uVal = currentVelocitySolution[col];
+            const real vVal = currentVelocitySolution[col + nodesCount];
+            rhs[row] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * uVal;
+            rhs[row + nodesCount] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * vVal;
+        }
+        SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
+
+        // Solve for the u component
+        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs, currentVelocitySolution, -1, 1e-6);
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+
+        // Solve for the v component
+        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs + nodesCount, currentVelocitySolution + nodesCount, -1, 1e-6);
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+
+        imposeVelocityDirichlet(currentVelocitySolution);
+
+    }
+}
+
+void NavierStokesAssembly::imposeVelocityDirichlet(SMM::Vector& velocityVector) {
+    const int nodesCount = grid.getNodesCount();
+    const int velocityDirichletCount = grid.getVelocityDirichletSize();
+    FemGrid2D::VelocityDirichletConstIt velocityDirichletBoundaries = grid.getVelocityDirichlet();
+    for(int boundaryIndex = 0; boundaryIndex < velocityDirichletCount; ++boundaryIndex) {
+        const FemGrid2D::VelocityDirichlet& boundary = velocityDirichletBoundaries[boundaryIndex];
+        std::unordered_map<char, float> variables;
+        for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+            const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+            const real x = grid.getNodesBuffer()[nodeIndex * 2];
+            const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+            variables['x'] = x;
+            variables['y'] = y;
+            float uBoundary = 0, vBoundary = 0;
+            boundary.eval(&variables, uBoundary, vBoundary);
+            velocityVector[nodeIndex] = uBoundary;
+            velocityVector[nodeIndex + nodesCount] = vBoundary;
+        }
+    }
+}
+
+
+void NavierStokesAssembly::assembleConstantMatrices() {
+    assemblVelocityMassMatrix();
+    assembleVelocityStiffnessMatrix();
     assembleDivergenceMatrix();
-    SMM::saveDenseText("/home/vasil/Documents/FMI/Магистратура/Дипломна/CPP/div_u.txt", divergenceMatrix);
 }
 
 void NavierStokesAssembly::assemblVelocityMassMatrix() {
@@ -276,7 +344,7 @@ void NavierStokesAssembly::assemblVelocityMassMatrix() {
     const int p2Size = 6;
     // This will hold the result of integral(psi_i(xi, eta) * psi_j(xi, eta) dxi * deta)
     real p2Squared[p2Size][p2Size] = {};
-    const auto squareP2 = [p2Size](const real xi, const real eta, real* out) -> void {
+    const auto squareP2 = [](const real xi, const real eta, real* out) -> void {
         real p2Res[p2Size];
         p2Shape(xi, eta, p2Res);
         for(int i = 0; i < p2Size; ++i) {
@@ -289,7 +357,7 @@ void NavierStokesAssembly::assemblVelocityMassMatrix() {
     integrateOverTriangle<p2Size * p2Size>(squareP2, reinterpret_cast<real*>(p2Squared));
 
     // Lambda wich takes advantage of precomputed shape function integral
-    const auto localMass = [&p2Squared, p2Size](const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
+    const auto localMass = [&p2Squared]([[maybe_unused]]const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
         const real jDetAbs = std::abs(linTriangleTmJacobian(elementNodes));
         for(int i = 0; i < p2Size; ++i) {
             for(int j = 0; j < p2Size; ++j) {
@@ -313,7 +381,7 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
     const int p2Size = 6;
     const int delP2Size = p2Size * 2;
     // Compute the integral of each pair shape function derivatives.
-    const auto squareDelP = [delP2Size](const real xi, const real eta, real* out) -> void{
+    const auto squareDelP = [](const real xi, const real eta, real* out) -> void{
         real delP2[delP2Size] = {};
         delP2Shape(xi, eta, delP2);
         for(int i = 0; i < delP2Size; ++i) {
@@ -326,7 +394,7 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
     real delPSq[delP2Size][delP2Size] = {};
     integrateOverTriangle<delP2Size * delP2Size>(squareDelP, reinterpret_cast<real*>(delPSq));
 
-    const auto localStiffness = [&delPSq, p2Size](const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
+    const auto localStiffness = [&delPSq]([[maybe_unused]]const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
         real b[2][2];
         real J;
         differentialOperator(elementNodes, J, b);
@@ -358,10 +426,10 @@ void NavierStokesAssembly::assembleVelocityStiffnessMatrix() {
         }
     };
 
-    assembleMatrix<decltype(localStiffness), p2Size, p2Size>(localStiffness, stiffnessMatrix);
+    assembleMatrix<decltype(localStiffness), p2Size, p2Size>(localStiffness, velocityStiffnessMatrix);
 }
 
-void NavierStokesAssembly::assembleConvectionMatrix() {
+void NavierStokesAssembly::assembleConvectionMatrix(SMM::CSRMatrix& convectionMatrix) {
     const int p2Size = 6;
     const int nodesCount = grid.getNodesCount();
     const auto localConvection = [&](const int* elementIndexes, const real* elementNodes, real localMatrixOut[p2Size][p2Size]) -> void {
@@ -376,21 +444,22 @@ void NavierStokesAssembly::assembleConvectionMatrix() {
         real J;
         StaticMatrix<real, 2, 2> B;
         differentialOperator(elementNodes, J, B);
-        const int sign = J > 0 ? 1 : -1;
-
+        const real sign = J > 0 ? real(1) : real(-1);
         // The local convection matrix is of the form Integrate(Transpose(PSI(xi, eta)).PSI(xi, eta).UV.B.DPSI(xi, eta) * dxi * deta)
-        // This lambda is the function which is being integrated, it's later passed to integrate over triangle to get the localMatrix
-        const auto convectionIntegrant = [&](const real xi, const real eta, real* out) -> void {
+        // This functor is the function which is being integrated, it's later passed to integrate over triangle to get the localMatrix
+        const auto convectionIntegrant = [&](const real xi, const real eta, real* outIntegrated) -> void {
             // TODO: p2Shape and delP2Shape can be cached for various xi and eta used by the integrator
+            const int p2Size = 6;
             StaticMatrix<real, 1, p2Size> psi;
             p2Shape(xi, eta, psi.data());
 
             StaticMatrix<real, 2, p2Size> delPsi;
-            delP2Shape(xi, eta, psi.data());
-
+            delP2Shape(xi, eta, delPsi.data());
+            
             StaticMatrix<real, p2Size, p2Size> result = (psi.getTransposed() * psi * velocity * B * delPsi) * sign;
-            memcpy(out, result.data(), sizeof(real) * result.getRows() * result.getCols());
+            memcpy(outIntegrated, result.data(), sizeof(real) * p2Size * p2Size);
         };
+        std::fill_n(reinterpret_cast<real*>(localMatrixOut), p2Size * p2Size, real(0));
         integrateOverTriangle<p2Size * p2Size>(convectionIntegrant, reinterpret_cast<real*>(localMatrixOut));
     };
 
