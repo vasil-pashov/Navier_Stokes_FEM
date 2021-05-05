@@ -15,13 +15,13 @@ set(
 )
 
 if(${WITH_ADRESS_SANITIZER})
-	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		set(_sanitizer_flags "-g -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -O0")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_sanitizer_flags}")
 		set(CMAKE_CXX_EXE_LINKER_FLAGS "${CMAKE_CXX_EXE_LINKER_FLAGS} ${_sanitizer_flags}")
 		unset(_sanitizer_flags)
 	else()
-		message(ERROR "Address sanitizing is implemented only for Clang compiler")
+		message(ERROR "Address sanitizing is supported only for Clang and GCC")
 	endif()
 endif()
 
