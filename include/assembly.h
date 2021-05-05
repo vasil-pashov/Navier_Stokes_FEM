@@ -1,5 +1,6 @@
 #pragma once
 #include <sparse_matrix_math/sparse_matrix_math.h>
+#include <unordered_set>
 #include <grid.h>
 #include "static_matrix.h"
 
@@ -267,6 +268,29 @@ private:
     template<typename TLocalF, int localRows, int localCols>
     void assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out);
 
+    /// Assemble global matrix which will be used to solve problem with Dirichlet conditions. Rows and colums of the
+    /// out matrix with indexes matching a boundary nodes will be filled  with zero (except the diagonal elements).
+    /// The out matrix will have value one on the diagonal elements corresponding to the boundary nodes.
+    /// The elements which were dropped from the out matrix will be added to outBondaryWeights, these weights must
+    /// be subtracted from the right hand side when the linear system is solved
+    /// @tparam TLocalF Type of the functor which will compute the local matrix
+    /// @tparam localRows Number of rows in the local matrix
+    /// @tparam localCols Number of columns in the local matrix
+    /// @param[in] localFunction Functor which will compute the local matrix
+    /// @param[in] boundaryNodes The set of all nodes which appear on the boundary where Dirichlet boundary
+    /// conditions will be imposed
+    /// @param[out] out The result of the assembling. Ones will appear on the main diagonal elements corresponding
+    /// to each bondary nodes
+    /// @param[out] outBondaryWeights All elements which were dropped from the matrix due to the imposing procedure
+    /// They are needed when the linear system with this matrix is solved
+    template<typename TLocalF, int localRows, int localCols>
+    void assembleBCMatrix(
+        const TLocalF& localFunction,
+        const std::unordered_set<int>& boundaryNodes,
+        SMM::CSRMatrix& out,
+        SMM::TripletMatrix& outBondaryWeights
+    );
+
     /// Handles assembling of a general stiffness matrix. It precomputes the integrals of each pair
     /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
     /// @tparam[Shape] The class representing the shape functions which are going to be used to assemble this matrix
@@ -304,6 +328,45 @@ private:
     /// Size of the time step used when approximating derivatives with respect to time
     real dt;
 };
+
+template<typename VelocityShape, typename PressureShape>
+template<typename TLocalF, int localRows, int localCols>
+void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
+    const TLocalF& localFunction,
+    const std::unordered_set<int>& boundaryNodes,
+    SMM::CSRMatrix& out,
+    SMM::TripletMatrix& outBondaryWeights
+) {
+    const int numNodes = grid.getNodesCount();
+    const int numElements = grid.getElementsCount();
+    const int elementSize = std::max(VelocityShape::size, PressureShape::size);
+    int elementIndexes[elementSize];
+    real elementNodes[2 * elementSize];
+    assert(elementSize == grid.getElementSize());
+    StaticMatrix<real, localRows, localCols> localMatrix;
+    SMM::TripletMatrix triplet(numNodes, numNodes);
+    for(const auto& boundaryNode : boundaryNodes) {
+        triplet.addEntry(boundaryNode, boundaryNode, real(1));
+    }
+    for(int i = 0; i < numElements; ++i) {
+        grid.getElement(i, elementIndexes, elementNodes);
+        localFunction(elementIndexes, elementNodes, localMatrix);
+        for(int localRow = 0; localRow < localRows; ++localRow) {
+            const int globalRow = elementIndexes[localRow];
+            const bool isRowBoundary = boundaryNodes.find(globalRow) != boundaryNodes.end();
+            for(int localCol = 0; localCol < localCols; ++localCol) {
+                const int globalCol = elementIndexes[localCol];
+                const bool isColBoundary = boundaryNodes.find(globalCol) != boundaryNodes.end();
+                if(!isRowBoundary && !isColBoundary) {
+                    triplet.addEntry(globalRow, globalCol, localMatrix[localRow][localCol]);
+                } else if(globalRow != globalCol) {
+                    outBondaryWeights.addEntry(globalRow, globalCol, localMatrix[localRow][localCol]);
+                }
+            }
+        }
+    }
+    out.init(triplet);
+}
 
 template<typename VelocityShape, typename PressureShape>
 template<typename TLocalF, int localRows, int localCols>
