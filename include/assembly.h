@@ -120,7 +120,7 @@ struct TriangleIntegrator {
             const real x = nodes[2 * i];
             const real y = nodes[2 * i + 1];
             f(x, y, tmp);
-            out += tmp;
+            out += tmp * weights[i];
         }
     }
 private:
