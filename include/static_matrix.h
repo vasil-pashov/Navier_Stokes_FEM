@@ -31,6 +31,15 @@ public:
         for (int i = 0; i < rows; ++i) matrix[i][i] = diagonal;
     }
 
+    using Iterator = T*;
+    Iterator begin() {
+        return data();
+    }
+
+    Iterator end() {
+        return data() + rows * cols;
+    }
+
     const T* data() const {
         return &matrix[0][0];
     }
@@ -76,10 +85,10 @@ public:
     }
 
     const StaticMatrix<T, rows, cols> operator+(const StaticMatrix<T, rows, cols>& rhs) const {
-        StaticMatrix<T, rows, cols> rezult;
+        StaticMatrix<T, rows, cols> result;
         for (int i = 0; i < rows; ++i) {
             for (int j = 0; j < cols; ++j) {
-                rezult.element(i, j) = element(i, j) + rhs.data[i][j];
+                result.element(i, j) = element(i, j) + rhs.data[i][j];
             }
         }
     }
@@ -89,6 +98,14 @@ public:
         for (int i = 0; i < rows; ++i) {
             for (int j = 0; j < cols; ++j) {
                 result.element(i, j) = element(i, j) - rhs.data[i][j];
+            }
+        }
+    }
+
+    void operator +=(const StaticMatrix<T, rows, cols>& other) {
+         for (int i = 0; i < rows; ++i) {
+            for (int j = 0; j < cols; ++j) {
+                element(i, j) += other.element(i, j);
             }
         }
     }

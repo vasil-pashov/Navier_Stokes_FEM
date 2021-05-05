@@ -73,10 +73,13 @@ public:
     /// @param[in] elementIndex The index of the element to be extracted
     /// @param[out] outElement Array of size at least elementSize where node indices for the array will be extracted
     void getElement(const int elementIndex, int* outElement, real* outNodes) const;
+    /// Return the number of nodes in each element.
+    int getElementSize() const;
     /// Load mesh written in JSON file format
     /// @param[in] filePath Path the the mesh file
     /// @returns Status code: 0 on success
     int loadJSON(const char* filePath);
+
     using VelocityDirichletConstIt = const VelocityDirichlet*;
     /// Get the number of different boundaries where Dirichlet condition is imposed for the velocity
     int getVelocityDirichletSize() const;
@@ -130,6 +133,10 @@ inline const real* FemGrid2D::getNodesBuffer() const {
 
 inline int FemGrid2D::getElementsCount() const {
     return elementsCount;
+}
+
+inline int FemGrid2D::getElementSize() const {
+    return elementSize;
 }
 
 inline void FemGrid2D::getElement(const int elementIndex, int* outElement, real* outNodes) const {
