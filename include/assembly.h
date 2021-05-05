@@ -247,7 +247,7 @@ private:
     /// Stiffness matrix for the velocity formed by (del(fi_i), del(fi_j)) : forall i, j in 0...numPressureNodes - 1
     /// Where fi_i is the i-th pressure basis function. This matrix is constant for the given mesh and does not change
     /// when the time changes.
-    SMM::CSRMatrix pressureShapeMatrix;
+    SMM::CSRMatrix pressureStiffnessMatrix;
 
     /// Divergence matrices formed by (dfi_i/dx, chi_j) and (dfi_i/dy, chi_j) : forall i in numVelocityNodes - 1, j in 0...numPressureNodes - 1
     /// Where fi_i is the i-th velocity basis function and chi_j is the j-th pressure basis function
@@ -300,7 +300,7 @@ private:
 
     /// Viscosity of the fluid
     real viscosity;
-    
+
     /// Size of the time step used when approximating derivatives with respect to time
     real dt;
 };
@@ -412,6 +412,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
     currentVelocitySolution.init(nodesCount * 2, 0.0f);
     imposeVelocityDirichlet(currentVelocitySolution);
     SMM::Vector rhs(nodesCount * 2, 0.0f);
+
     for(int i = 0; i < steps; ++i) {
         // Convection is the convection matrix formed by (dot(u_h, del(fi_i)), fi_j) : forall i, j in 0...numVelocityNodes - 1
         // Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
@@ -446,7 +447,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
         imposeVelocityDirichlet(currentVelocitySolution);
-
     }
 }
 
@@ -477,7 +477,7 @@ template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::assembleConstantMatrices() {
     assemblVelocityMassMatrix();
     assembleStiffnessMatrix<VelocityShape>(velocityStiffnessMatrix);
-    assembleStiffnessMatrix<PressureShape>(pressureShapeMatrix);
+    assembleStiffnessMatrix<PressureShape>(pressureStiffnessMatrix);
     assembleDivergenceMatrix();
 }
 
