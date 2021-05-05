@@ -276,17 +276,19 @@ void NavierStokesAssembly::solve(const float totalTime) {
         // TODO: Do not allocate space on each iteration, but reuse the matrix sparse structure
         SMM::CSRMatrix convectionMatrix;
         assembleConvectionMatrix(convectionMatrix);
-        convectionMatrix.inplaceAdd(velocityStiffnessMatrix);
         assert(convectionMatrix.hasSameNonZeroPattern(velocityMassMatrix));
         SMM::CSRMatrix::ConstIterator convectionIt = convectionMatrix.begin();
         SMM::CSRMatrix::ConstIterator massIt = velocityMassMatrix.begin();
-        for(;convectionIt != convectionMatrix.end() && massIt != velocityMassMatrix.end(); ++convectionIt, ++massIt) {
+        SMM::CSRMatrix::ConstIterator velStiffnessIt = velocityStiffnessMatrix.begin();
+        // TODO: The expression for the right-hand side in matrix form is: velocityMass - dt * (viscosity * velocityStiffness + convection)
+        // velocity mass and velocity stifness are constant matrices. They can be combined before the iterations start.
+        for(;convectionIt != convectionMatrix.end(); ++convectionIt, ++massIt, ++velStiffnessIt) {
             const int row = convectionIt->getRow();
             const int col = convectionIt->getCol();
             const real uVal = currentVelocitySolution[col];
             const real vVal = currentVelocitySolution[col + nodesCount];
-            rhs[row] += (massIt->getValue() - dt * convectionIt->getValue()) * uVal;
-            rhs[row + nodesCount] += (massIt->getValue() - dt * convectionIt->getValue()) * vVal;
+            rhs[row] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * uVal;
+            rhs[row + nodesCount] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * vVal;
         }
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
 
