@@ -6,6 +6,85 @@ namespace NSFem {
 
 using real = double;
 
+/// Structure to represent first order polynomial shape functions for triangular elements
+struct P1 {
+    /// The number of shape functions (in eval)
+    static constexpr int size = 3;
+    /// Shape functions for 2D triangluar element with degrees of freedom in each triangle node
+    /// @param[in] xi - Coordinate in the (transformed) unit triangle along the xi (aka x) axis
+    /// @param[in] eta - Coordinate in the (transformed) unit triangle anong the eta (aka y) axis
+    /// @param[out] out - The value of each shape function at (xi, eta). The array must have at least 6 elements.
+    /// Order: [0, 1, 2] - The values at the nodes of the triangle
+    static constexpr void eval(const real xi, const real eta, real out[P1::size]) {
+        out[0] = 1 - xi - eta;
+        out[1] = xi;
+        out[2] = eta;
+    }
+    /// Compute the derivatives in xi and eta directions, at point (xi, eta) of the shape functions for triangular
+    /// element with degrees of freedom in each triangle node
+    /// @param[in] xi - Coordinate in the (transformed) unit triangle along the xi (aka x) axis
+    /// @param[in] eta - Coordinate in the (transformed) unit triangle anong the eta (aka y) axis
+    /// @param[out] out - This will hold the gradient. The first 3 elements are the derivatives of the shape functions with
+    /// respect to xi, next 3 elements are the derivatives of the shape functions with respect to eta
+    static constexpr void del([[maybe_unused]]const real xi, [[maybe_unused]]const real eta, real out[2][P1::size]) {
+        // dpsi/dxi
+        out[0][0] = -1.0f;
+        out[0][1] = 1.0f;
+        out[0][2] = 0.0f;
+
+        // dpsi/deta
+        out[1][0] = -1.0f;
+        out[1][1] = 0.0f;
+        out[1][2] = 1.0f;
+    }
+};
+
+/// Structure to represent second order polynomial shape functions for triangular elements
+struct P2 {
+    /// The number of shape functions (in eval)
+    static constexpr int size = 6;
+    /// Shape functions for 2D triangluar element with degrees of freedom in each triangle node and in the middle of each side
+    /// @param[in] xi - Coordinate in the (transformed) unit triangle along the xi (aka x) axis
+    /// @param[in] eta - Coordinate in the (transformed) unit triangle anong the eta (aka y) axis
+    /// @param[out] out - The value of each shape function at (xi, eta). The array must have at least 6 elements.
+    /// Order is as follows:
+    /// [0, 1, 2] - The values at the nodes of the triangle
+    /// 3 - the value at the point between 1 and 2
+    /// 4 - the value at the point between 0 and 2
+    /// 5 - the value at the point between 0 and 1
+    static constexpr void eval(const real xi, const real eta, real out[P2::size]) {
+        out[0] = 1 - 3 * xi - 3 * eta + 2 * xi * xi + 4 * xi * eta + 2 * eta * eta;
+        out[1] = 2 * xi * xi - xi;
+        out[2] = 2 * eta * eta - eta;
+        out[3] = 4 * xi * eta;
+        out[4] = 4 * eta - 4 * xi * eta - 4 * eta * eta;
+        out[5] = 4 * xi - 4 * xi * xi - 4 * xi * eta;
+    }
+
+    /// Compute the derivatives in xi and eta directions, at point (xi, eta) of the shape functions for triangular 
+    ///element with degrees of freedom in each triangle node and in the middle of each side
+    /// @param[in] xi - Coordinate in the (transformed) unit triangle along the xi (aka x) axis
+    /// @param[in] eta - Coordinate in the (transformed) unit triangle anong the eta (aka y) axis
+    /// @param[out] out - This will hold the gradient. The first 6 elements are the derivatives of the shape functions with
+    /// respect to xi, next 6 elements are the derivatives of the shape functions with respect to eta
+    static constexpr void del(const real xi, const real eta, real out[2 * P2::size]) {
+        // dpsi/dxi
+        out[0] = -3 + 4 * eta + 4 * xi;
+        out[1] = -1 + 4 * xi;
+        out[2] = 0.0f;
+        out[3] = 4 * eta;
+        out[4] = -4 * eta;
+        out[5] = 4 - 4 * eta - 8 * xi;
+        // dpsi/deta
+        out[6] = -3 + 4 * eta + 4 * xi;
+        out[7] = 0;
+        out[8] = -1 + 4 * eta;
+        out[9] = 4 * xi;
+        out[10] = 4 - 8 * eta - 4 * xi;
+        out[11] = -4 * xi;
+    }
+};
+
 class NavierStokesAssembly {
 public:
     NavierStokesAssembly(FemGrid2D&& grid, const real dt, const real viscosity);
