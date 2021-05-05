@@ -37,7 +37,6 @@ find_package(nlohmann_json REQUIRED CONFIG)
 set(CPP
 	cpp/main.cpp
 	cpp/grid.cpp
-	cpp/assembly.cpp
 	cpp/expression.cpp
 	cpp/error_code.cpp
 )
