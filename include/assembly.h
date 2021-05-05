@@ -265,7 +265,7 @@ private:
     /// When using P2-P1 elements the pressure is only at the vertices of the triangle
     SMM::Vector currentPressureSolution;
 
-    template<typename TLocalF, int localRows, int localCols>
+    template<int localRows, int localCols, typename TLocalF>
     void assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out);
 
     /// Assemble global matrix which will be used to solve problem with Dirichlet conditions. Rows and colums of the
@@ -283,7 +283,7 @@ private:
     /// to each bondary nodes
     /// @param[out] outBondaryWeights All elements which were dropped from the matrix due to the imposing procedure
     /// They are needed when the linear system with this matrix is solved
-    template<typename TLocalF, int localRows, int localCols>
+    template<int localRows, int localCols, typename TLocalF>
     void assembleBCMatrix(
         const TLocalF& localFunction,
         const std::unordered_set<int>& boundaryNodes,
@@ -330,7 +330,7 @@ private:
 };
 
 template<typename VelocityShape, typename PressureShape>
-template<typename TLocalF, int localRows, int localCols>
+template<int localRows, int localCols, typename TLocalF>
 void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
     const TLocalF& localFunction,
     const std::unordered_set<int>& boundaryNodes,
@@ -369,7 +369,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
 }
 
 template<typename VelocityShape, typename PressureShape>
-template<typename TLocalF, int localRows, int localCols>
+template<int localRows, int localCols, typename TLocalF>
 void NavierStokesAssembly<VelocityShape, PressureShape>::assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out) {
     const int numNodes = grid.getNodesCount();
     const int numElements = grid.getElementsCount();
@@ -456,7 +456,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleStiffnessMatrix
         }
     };
 
-    assembleMatrix<decltype(localStiffness), Shape::size, Shape::size>(localStiffness, out);
+    assembleMatrix<Shape::size, Shape::size>(localStiffness, out);
 }
 
 template<typename VelocityShape, typename PressureShape>
@@ -579,7 +579,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assemblVelocityMassMatr
             }
         }
     };
-    assembleMatrix<decltype(localMass), VelocityShape::size, VelocityShape::size>(localMass, velocityMassMatrix);
+    assembleMatrix<VelocityShape::size, VelocityShape::size>(localMass, velocityMassMatrix);
 }
 
 template<typename VelocityShape, typename PressureShape>
@@ -622,7 +622,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleConvectionMatri
         TriangleIntegrator::integrate(convectionIntegrant, localMatrixOut);
     };
 
-    assembleMatrix<decltype(localConvection), VelocityShape::size , VelocityShape::size>(localConvection, convectionMatrix);
+    assembleMatrix<VelocityShape::size , VelocityShape::size>(localConvection, convectionMatrix);
 }
 
 template<typename VelocityShape, typename PressureShape>
