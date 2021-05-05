@@ -31,6 +31,15 @@ public:
         for (int i = 0; i < rows; ++i) matrix[i][i] = diagonal;
     }
 
+    using Iterator = T*;
+    Iterator begin() {
+        return data();
+    }
+
+    Iterator end() {
+        return data() + rows * cols;
+    }
+
     const T* data() const {
         return &matrix[0][0];
     }

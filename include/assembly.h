@@ -114,7 +114,7 @@ struct TriangleIntegrator {
 
     template<typename TFunctor, int rows, int cols>
     constexpr static void integrate(const TFunctor& f, StaticMatrix<real, rows, cols>& out) {
-        assert(std::all_of(out.data(), out.data() + out.getRows() * out.getCols(), [](const real x){return x == real(0);}));
+        assert(std::all_of(out.begin(), out.end(), [](const real x){return x == real(0);}));
         StaticMatrix<real, rows, cols> tmp;
         for(int i = 0; i < numIntegrationPoints; ++i) {
             const real x = nodes[2 * i];
