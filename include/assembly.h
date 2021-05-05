@@ -105,9 +105,9 @@ struct P1 {
         out[0][2] = 0.0f;
 
         // dpsi/deta
-        out[1][3] = -1.0f;
-        out[1][4] = 0.0f;
-        out[1][5] = 1.0f;
+        out[1][0] = -1.0f;
+        out[1][1] = 0.0f;
+        out[1][2] = 1.0f;
     }
 };
 
@@ -301,9 +301,10 @@ template<typename TLocalF, int localRows, int localCols>
 void NavierStokesAssembly<VelocityShape, PressureShape>::assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out) {
     const int numNodes = grid.getNodesCount();
     const int numElements = grid.getElementsCount();
-    const int elementSize = std::max(localRows, localCols);
+    const int elementSize = std::max(VelocityShape::size, PressureShape::size);
     int elementIndexes[elementSize];
     real elementNodes[2 * elementSize];
+    assert(elementSize == grid.getElementSize());
     StaticMatrix<real, localRows, localCols> localMatrix;
     SMM::TripletMatrix triplet(numNodes, numNodes);
     for(int i = 0; i < numElements; ++i) {
@@ -573,7 +574,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatri
             }
         }
     };
-     // Matrix to hold combined values for the integrals: Integrate(psi_i(xi, eta) * dpsi_j(xi, eta)/dxi * dxi * deta) and
+    // Matrix to hold combined values for the integrals: Integrate(psi_i(xi, eta) * dpsi_j(xi, eta)/dxi * dxi * deta) and
     // Integrate(psi(xi, eta) * dpsi(xi, eta)/deta * dxi * deta). Where i is in [0;p1Size-1] and j is in [0;p2Size-1]
     // The first p2Size entries in each row are the first integral and the second represent the second integral 
     StaticMatrix<real, PressureShape::size, VelocityShape::delSize> p1DelP2Combined;
