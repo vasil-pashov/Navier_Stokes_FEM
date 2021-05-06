@@ -224,10 +224,6 @@ public:
     NavierStokesAssembly(FemGrid2D&& grid, const real dt, const real viscosity);
     void solve(const float totalTime);
 private:
-    /// Function which wraps the assembling of all constant matrices. These matrices will stay the same
-    /// during the whole solving phase. This function must be called once before we start time iterations.
-    void assembleConstantMatrices();
-
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
 
@@ -277,12 +273,12 @@ private:
     /// @tparam localRows Number of rows in the local matrix
     /// @tparam localCols Number of columns in the local matrix
     /// @param[in] localFunction Functor which will compute the local matrix
-    /// @param[in] boundaryNodes The set of all nodes which appear on the boundary where Dirichlet boundary
-    /// conditions will be imposed
+    /// @param[in] boundaryNodes Map between boundary node and the boundary to which it belogns
     /// @param[out] out The result of the assembling. Ones will appear on the main diagonal elements corresponding
     /// to each bondary nodes
-    /// @param[out] outBondaryWeights All elements which were dropped from the matrix due to the imposing procedure
-    /// They are needed when the linear system with this matrix is solved
+    /// @param[out] outBondaryWeights For each boundary this holds the columns which were zeroed out when
+    /// the diagonal element was set to 1. The rows corresponding to boundary nodes are ommitted as they are
+    /// filled with 0 anyway
     template<int localRows, int localCols, typename TLocalF>
     void assembleBCMatrix(
         const TLocalF& localFunction,
@@ -327,6 +323,74 @@ private:
 
     /// Size of the time step used when approximating derivatives with respect to time
     real dt;
+
+    template<typename Shape>
+    struct LocalStiffnessFunctor {
+        LocalStiffnessFunctor() {
+            // Compute the integral of each pair shape function derivatives.
+            const auto squareDelP = [](
+                const real xi,
+                const real eta,
+                StaticMatrix<real, Shape::delSize, Shape::delSize>& out
+            ) -> void {
+                StaticMatrix<real, 2, Shape::size> del;
+                Shape::del(xi, eta, del);
+                auto it = out.begin();
+                for(const auto i : del) {
+                    for(const auto j : del) {
+                        *it = i * j;
+                        ++it;
+                    }
+                }
+            };
+            TriangleIntegrator::integrate(squareDelP, delPSq);
+        }
+        void operator()(
+            [[maybe_unused]]const int* elementIndexes,
+            const real* elementNodes,
+            StaticMatrix<real, Shape::size, Shape::size>& localMatrixOut
+        ) const {
+            // Compute the mass matrix. Local stiffness matrix is of the form Integral(Transpose(B.DPSI(xi, eta)/|J|).B.DPSI(xi, eta)/|J| * abs(|J|) dxi, deta),
+            // |J| cancel out to produce more readable result 1/abs(|J|) * Integral(Transpose(B.PSI(xi, eta)).B.PSI(xi, eta) * dxi, deta)
+            // Where DPSI(xi, eta) = {dpsi_1(xi, eta)/dxi, ..., dpsi_n(xi, eta)/dxi, dpsi_1(xi, eta)/deta ... dpsi_n(xi, eta)/deta} is a
+            // row vector containing the gradient of each shape function, first are the derivatives in the xi direction then are the derivatives
+            // in the eta direction |J| is the determinant of the linear transformation to the unit triangle and B/|J| is a 2x2 matrix which
+            // represents the Grad operator in terms of xi and eta. As with mass matrix note, that B and |J| do not depend on xi and eta, only
+            // the gradient of the shape functions dependon xi and eta. Thus we can precompute all pairs of shape function integrals and reuse
+            // them in each element. The main complexity comes from the matrix B, which multiples the shape functions.
+            StaticMatrix<real, Shape::dim, Shape::dim> b;
+            real J;
+            differentialOperator(elementNodes, J, b);
+            J = real(1.0) / std::abs(J);
+            for(int i = 0; i < Shape::size; ++i) {
+                for(int j = 0; j < Shape::size; ++j) {
+                    localMatrixOut[i][j] = real(0);
+                    const real sq[4] = {
+                        delPSq[i][j],
+                        delPSq[i][Shape::size + j],
+                        delPSq[Shape::size + i][j],
+                        delPSq[Shape::size + i][Shape::size + j]
+                    };
+                    for(int k = 0; k < 2; ++k) {
+                        // This function takes advantage that in the integral for the local matrix only del(DPSI) depends on xi and eta
+                        // The problem is the matrix B which represents the Grad operator. We have Transpose(B.DPSI(xi, eta)).B.DPSI(xi, eta) = 
+                        // Transpose(DPSI).Transpose(B).B.DPSI. Let us denote U = Transpose(DPSI).Transpose(B) and V = B.DPSI
+                        // U[i][j] = Sum(B[j][k]*DPSI[k][i], k=0, 1) = Sum(Transpose(DPSI)[i][k]*Transpose(B)[k][j], k = 0, 1) = 
+                        // V[i][j] = Sum(B[i][k]*DPSI[k][j], k=0, 1)
+                        // Let us denote the result - localMatrixOut with R = U.V
+                        // R[i][j] = Sum(U[i][k]*V[k][j], k=0, 1)
+                        // R[i][j] = Sum(Sum(DPSI[k'][i]*B[k][k'], k'=0, 1) * Sum(B[k][k'] * DPSI[k']j[],k'=0, 1), k=0, 1)
+                        // When we expand the two sums and the multiplication we get the expression for localMatrixOut
+                        // This way we have separated the pairs of shape function derivatives and we can use the precomputed values
+                        localMatrixOut[i][j] += sq[0]*b[k][0]*b[k][0] + sq[1]*b[k][0]*b[k][1] + sq[2]*b[k][0]*b[k][1] + sq[3]*b[k][1]*b[k][1];
+                    }
+                    localMatrixOut[i][j] *= J;
+                }
+            }
+        }
+    private:
+        StaticMatrix<real, Shape::delSize, Shape::delSize> delPSq;
+    };
 };
 
 template<typename VelocityShape, typename PressureShape>
@@ -337,6 +401,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
     SMM::CSRMatrix& out,
     SMM::TripletMatrix& outBondaryWeights
 ) {
+    // IMPORTANT: This will work for symmetric matrices. It might work for not symmetric matrices
+    // but I'm not sure. This procedure will keep the outBondaryWeights weights in transposed manner
+    // The elements nodes which are in the same column in out will appear in the same row in outBondaryWeights
+    // This is safe for symmetric matrices.
     const int numNodes = grid.getNodesCount();
     const int numElements = grid.getElementsCount();
     const int elementSize = std::max(VelocityShape::size, PressureShape::size);
@@ -344,7 +412,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
     real elementNodes[2 * elementSize];
     assert(elementSize == grid.getElementSize());
     StaticMatrix<real, localRows, localCols> localMatrix;
-    SMM::TripletMatrix triplet(numNodes, numNodes);
+    SMM::TripletMatrix triplet(numNodes / 2, numNodes / 2);
     for(const auto& boundaryNode : boundaryNodes) {
         triplet.addEntry(boundaryNode, boundaryNode, real(1));
     }
@@ -359,8 +427,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
                 const bool isColBoundary = boundaryNodes.find(globalCol) != boundaryNodes.end();
                 if(!isRowBoundary && !isColBoundary) {
                     triplet.addEntry(globalRow, globalCol, localMatrix[localRow][localCol]);
-                } else if(globalRow != globalCol) {
-                    outBondaryWeights.addEntry(globalRow, globalCol, localMatrix[localRow][localCol]);
+                } else if(!isRowBoundary && isColBoundary) {
+                    outBondaryWeights.addEntry(globalCol, globalRow, localMatrix[localRow][localCol]);
                 }
             }
         }
@@ -394,72 +462,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleMatrix(const TL
 }
 
 template<typename VelocityShape, typename PressureShape>
-template<typename Shape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::assembleStiffnessMatrix(SMM::CSRMatrix& out) {
-    // Compute the mass matrix. Local stiffness matrix is of the form Integral(Transpose(B.DPSI(xi, eta)/|J|).B.DPSI(xi, eta)/|J| * abs(|J|) dxi, deta),
-    // |J| cancel out to produce more readable result 1/abs(|J|) * Integral(Transpose(B.PSI(xi, eta)).B.PSI(xi, eta) * dxi, deta)
-    // Where DPSI(xi, eta) = {dpsi_1(xi, eta)/dxi, ..., dpsi_n(xi, eta)/dxi, dpsi_1(xi, eta)/deta ... dpsi_n(xi, eta)/deta} is a
-    // row vector containing the gradient of each shape function, first are the derivatives in the xi direction then are the derivatives
-    // in the eta direction |J| is the determinant of the linear transformation to the unit triangle and B/|J| is a 2x2 matrix which
-    // represents the Grad operator in terms of xi and eta. As with mass matrix note, that B and |J| do not depend on xi and eta, only
-    // the gradient of the shape functions dependon xi and eta. Thus we can precompute all pairs of shape function integrals and reuse
-    // them in each element. The main complexity comes from the matrix B, which multiples the shape functions.
-
-    // Compute the integral of each pair shape function derivatives.
-    const auto squareDelP = [](const real xi, const real eta, StaticMatrix<real, Shape::delSize, Shape::delSize>& out) -> void {
-        StaticMatrix<real, 2, Shape::size> del;
-        Shape::del(xi, eta, del);
-        auto it = out.begin();
-        for(const auto i : del) {
-            for(const auto j : del) {
-                *it = i * j;
-                ++it;
-            }
-        }
-    };
-    StaticMatrix<real, Shape::delSize, Shape::delSize> delPSq;
-    TriangleIntegrator::integrate(squareDelP, delPSq);
-
-    const auto localStiffness = [&](
-        [[maybe_unused]]const int* elementIndexes,
-        const real* elementNodes,
-        StaticMatrix<real, Shape::size, Shape::size>& localMatrixOut
-    ) -> void {
-        StaticMatrix<real, Shape::dim, Shape::dim> b;
-        real J;
-        differentialOperator(elementNodes, J, b);
-        J = real(1.0) / std::abs(J);
-        for(int i = 0; i < Shape::size; ++i) {
-            for(int j = 0; j < Shape::size; ++j) {
-                localMatrixOut[i][j] = real(0);
-                const real sq[4] = {
-                    delPSq[i][j],
-                    delPSq[i][Shape::size + j],
-                    delPSq[Shape::size + i][j],
-                    delPSq[Shape::size + i][Shape::size + j]
-                };
-                for(int k = 0; k < 2; ++k) {
-                    // This function takes advantage that in the integral for the local matrix only del(DPSI) depends on xi and eta
-                    // The problem is the matrix B which represents the Grad operator. We have Transpose(B.DPSI(xi, eta)).B.DPSI(xi, eta) = 
-                    // Transpose(DPSI).Transpose(B).B.DPSI. Let us denote U = Transpose(DPSI).Transpose(B) and V = B.DPSI
-                    // U[i][j] = Sum(B[j][k]*DPSI[k][i], k=0, 1) = Sum(Transpose(DPSI)[i][k]*Transpose(B)[k][j], k = 0, 1) = 
-                    // V[i][j] = Sum(B[i][k]*DPSI[k][j], k=0, 1)
-                    // Let us denote the result - localMatrixOut with R = U.V
-                    // R[i][j] = Sum(U[i][k]*V[k][j], k=0, 1)
-                    // R[i][j] = Sum(Sum(DPSI[k'][i]*B[k][k'], k'=0, 1) * Sum(B[k][k'] * DPSI[k']j[],k'=0, 1), k=0, 1)
-                    // When we expand the two sums and the multiplication we get the expression for localMatrixOut
-                    // This way we have separated the pairs of shape function derivatives and we can use the precomputed values
-                    localMatrixOut[i][j] += sq[0]*b[k][0]*b[k][0] + sq[1]*b[k][0]*b[k][1] + sq[2]*b[k][0]*b[k][1] + sq[3]*b[k][1]*b[k][1];
-                }
-                localMatrixOut[i][j] *= J;
-            }
-        }
-    };
-
-    assembleMatrix<Shape::size, Shape::size>(localStiffness, out);
-}
-
-template<typename VelocityShape, typename PressureShape>
 NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(FemGrid2D&& grid, const real dt, const real viscosity) :
     grid(std::move(grid)),
     viscosity(viscosity),
@@ -468,15 +470,70 @@ NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(FemGrid
 
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float totalTime) {
-    assembleConstantMatrices();
+    
+    assemblVelocityMassMatrix();
+
+    // Assemble global velocity stiffness matrix
+    LocalStiffnessFunctor<VelocityShape> localVelocityStiffness;
+    assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, velocityStiffnessMatrix);
+
+#ifdef GENERAL_PRESSURE_BOUNDARY
+    // Assemble global pressure stiffness matrix.
+    const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
+    // The key is the node index, the value is which boundary it belongs to
+    // This is used during the assembling to check if a node belongs to a boundary
+    // Since a node can belong to one and only one boundary we have vector of unordered
+    // triplet matrices which will hold the weights
+    std::unordered_set<int> allBoundaryNodes;
+    FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichlet();
+    for(int i = 0; i < numPressureDirichletBoundaries; ++i, ++pressureDrichiletIt) {
+        const int* boundary = pressureDrichiletIt->getNodeIndexes();
+        const int boundarySize = pressureDrichiletIt->getSize();
+        allBoundaryNodes.insert(boundary, boundary + boundarySize);
+
+    }
+    static_assert(VelocityShape::size == PressureShape::size * 2, "Only P(N) - P(N-1) elements are implemented");
+    SMM::TripletMatrix pressureDirichletWeightsTriplet(grid.getNodesCount() / 2, grid.getNodesCount() / 2);
+    LocalStiffnessFunctor<PressureShape> localPressureStuffness;
+    assembleBCMatrix<PressureShape::size, PressureShape::size>(
+        localPressureStuffness,
+        allBoundaryNodes,
+        pressureStiffnessMatrix,
+        pressureDirichletWeightsTriplet
+    );
+    SMM::CSRMatrix pressureDirichletWeights;
+    pressureDirichletWeights.init(pressureDirichletWeightsTriplet);
+#else
+    LocalStiffnessFunctor<PressureShape> localPressureStuffness;
+    assembleMatrix<PressureShape::size, PressureShape::size>(localPressureStuffness, pressureStiffnessMatrix);
+    const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
+    FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichlet();
+    for(int i = 0; i < numPressureDirichletBoundaries; ++i, ++pressureDrichiletIt) {
+        const int* boundary = pressureDrichiletIt->getNodeIndexes();
+        const int boundarySize = pressureDrichiletIt->getSize();
+        for(int j = 0; j < boundarySize; ++j) {
+           pressureStiffnessMatrix.updateEntry(boundary[j], boundary[j], 10e6);
+        }
+    }
+#endif
+     
+    assembleDivergenceMatrix();
+
     velocityStiffnessMatrix *= viscosity;
+    const real dtInv = real(1) / dt;
+    divergenceMatrix *= -dtInv;
+
     const int steps = totalTime / dt;
     const int nodesCount = grid.getNodesCount();
     currentVelocitySolution.init(nodesCount * 2, 0.0f);
+    currentPressureSolution.init(nodesCount / 2, real(0));
     imposeVelocityDirichlet(currentVelocitySolution);
-    SMM::Vector rhs(nodesCount * 2, 0.0f);
+    SMM::Vector velocityRhs(nodesCount * 2, 0);
+    SMM::Vector pressureRhs(nodesCount / 2, 0);
 
-    for(int i = 0; i < steps; ++i) {
+    std::unordered_map<char, float> pressureVars;
+
+    for(int timeStep = 0; timeStep < steps; ++timeStep) {
         // Convection is the convection matrix formed by (dot(u_h, del(fi_i)), fi_j) : forall i, j in 0...numVelocityNodes - 1
         // Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
         // components of the velocity, thus we will assemble it only once and use the same matrix to compute all velocity components.
@@ -496,20 +553,52 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
             const int col = convectionIt->getCol();
             const real uVal = currentVelocitySolution[col];
             const real vVal = currentVelocitySolution[col + nodesCount];
-            rhs[row] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * uVal;
-            rhs[row + nodesCount] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * vVal;
+            velocityRhs[row] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * uVal;
+            velocityRhs[row + nodesCount] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * vVal;
         }
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
 
         // Solve for the u component
-        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs, currentVelocitySolution, -1, 1e-6);
+        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, velocityRhs, currentVelocitySolution, -1, 1e-6);
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
         // Solve for the v component
-        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, rhs + nodesCount, currentVelocitySolution + nodesCount, -1, 1e-6);
+        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, velocityRhs + nodesCount, currentVelocitySolution + nodesCount, -1, 1e-6);
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
         imposeVelocityDirichlet(currentVelocitySolution);
+       
+        divergenceMatrix.rMult(currentVelocitySolution, pressureRhs);
+#ifdef GENERAL_PRESSURE_BOUNDARY
+        // Solve for the pressure. As pressure is "implicitly" stepped Dirchlet boundary conditions cannot be imposed after
+        // solving the linear system. For this reason the pressure stiffness matrix was tweaked before time iterations begin.
+        // Now at each time step the right hand side must be tweaked as well.
+
+        // Now impose the Dirichlet Boundary Conditions
+        pressureDrichiletIt = grid.getPressureDirichlet();
+        for(int boundaryIndex = 0; boundaryIndex < numPressureDirichletBoundaries; ++boundaryIndex, ++pressureDrichiletIt) {
+            const FemGrid2D::PressureDirichlet& boundary = *pressureDrichiletIt;
+            for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+                const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+                const real x = grid.getNodesBuffer()[nodeIndex * 2];
+                const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+                pressureVars['x'] = x;
+                pressureVars['y'] = y;
+                float pBoundary = 0;
+                boundary.eval(&pressureVars, pBoundary);
+                pressureRhs[nodeIndex] = pBoundary;
+                SMM::CSRMatrix::ConstRowIterator it = pressureDirichletWeights.rowBegin(nodeIndex);
+                const SMM::CSRMatrix::ConstRowIterator end = pressureDirichletWeights.rowEnd(nodeIndex);
+                while(it != end) {
+                    pressureRhs[it->getCol()] -= it->getValue() * pBoundary;
+                    ++it;
+                }
+            }
+        }
+#endif
+        // Finally solve the linear system for the pressure
+        solveStatus = SMM::ConjugateGradient(pressureStiffnessMatrix, pressureRhs, currentPressureSolution, -1, 1e-6);
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
     }
 }
 
@@ -533,15 +622,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::imposeVelocityDirichlet
             velocityVector[nodeIndex + nodesCount] = vBoundary;
         }
     }
-}
-
-
-template<typename VelocityShape, typename PressureShape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::assembleConstantMatrices() {
-    assemblVelocityMassMatrix();
-    assembleStiffnessMatrix<VelocityShape>(velocityStiffnessMatrix);
-    assembleStiffnessMatrix<PressureShape>(pressureStiffnessMatrix);
-    assembleDivergenceMatrix();
 }
 
 template<typename VelocityShape, typename PressureShape>
