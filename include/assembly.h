@@ -413,9 +413,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
     assert(elementSize == grid.getElementSize());
     StaticMatrix<real, localRows, localCols> localMatrix;
     SMM::TripletMatrix triplet(numNodes / 2, numNodes / 2);
-    for(const auto& boundaryNode : boundaryNodes) {
-        triplet.addEntry(boundaryNode, boundaryNode, real(1));
-    }
     for(int i = 0; i < numElements; ++i) {
         grid.getElement(i, elementIndexes, elementNodes);
         localFunction(elementIndexes, elementNodes, localMatrix);
@@ -432,6 +429,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
                 }
             }
         }
+    }
+    for(const auto& boundaryNode : boundaryNodes) {
+        triplet.addEntry(boundaryNode, boundaryNode, 1);
     }
     out.init(triplet);
 }
@@ -477,7 +477,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
     LocalStiffnessFunctor<VelocityShape> localVelocityStiffness;
     assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, velocityStiffnessMatrix);
 
-#ifdef GENERAL_PRESSURE_BOUNDARY
     // Assemble global pressure stiffness matrix.
     const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
     // The key is the node index, the value is which boundary it belongs to
@@ -503,19 +502,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
     );
     SMM::CSRMatrix pressureDirichletWeights;
     pressureDirichletWeights.init(pressureDirichletWeightsTriplet);
-#else
-    LocalStiffnessFunctor<PressureShape> localPressureStuffness;
-    assembleMatrix<PressureShape::size, PressureShape::size>(localPressureStuffness, pressureStiffnessMatrix);
-    const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
-    FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichlet();
-    for(int i = 0; i < numPressureDirichletBoundaries; ++i, ++pressureDrichiletIt) {
-        const int* boundary = pressureDrichiletIt->getNodeIndexes();
-        const int boundarySize = pressureDrichiletIt->getSize();
-        for(int j = 0; j < boundarySize; ++j) {
-           pressureStiffnessMatrix.updateEntry(boundary[j], boundary[j], 10e6);
-        }
-    }
-#endif
      
     assembleDivergenceMatrix();
 
@@ -568,11 +554,13 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
 
         imposeVelocityDirichlet(currentVelocitySolution);
        
-        divergenceMatrix.rMult(currentVelocitySolution, pressureRhs);
-#ifdef GENERAL_PRESSURE_BOUNDARY
+
         // Solve for the pressure. As pressure is "implicitly" stepped Dirchlet boundary conditions cannot be imposed after
         // solving the linear system. For this reason the pressure stiffness matrix was tweaked before time iterations begin.
         // Now at each time step the right hand side must be tweaked as well.
+
+        // Find the right hand side
+        divergenceMatrix.rMult(currentVelocitySolution, pressureRhs);
 
         // Now impose the Dirichlet Boundary Conditions
         pressureDrichiletIt = grid.getPressureDirichlet();
@@ -595,10 +583,11 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
                 }
             }
         }
-#endif
+
         // Finally solve the linear system for the pressure
         solveStatus = SMM::ConjugateGradient(pressureStiffnessMatrix, pressureRhs, currentPressureSolution, -1, 1e-6);
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
+
     }
 }
 
