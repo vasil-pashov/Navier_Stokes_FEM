@@ -250,7 +250,13 @@ private:
     /// Where fi_i is the i-th velocity basis function and chi_j is the j-th pressure basis function
     /// These are used when pressure is found from the tentative velocity. These matrices are constant for the given mesh and do not change
     /// when the time changes. 
-    SMM::CSRMatrix divergenceMatrix;
+    SMM::CSRMatrix velocityDivergenceMatrix;
+
+    /// Divergence matrices formed by (fi_i, dchi_j/dx) and (fi_i, dchi_j/dy) : forall i in numVelocityNodes - 1, j in 0...numPressureNodes - 1
+    /// Where fi_i is the i-th velocity basis function and chi_j is the j-th pressure basis function
+    /// These are used when pressure is found from the tentative velocity. These matrices are constant for the given mesh and do not change
+    /// when the time changes. 
+    SMM::CSRMatrix pressureDivergenceMatrix;
 
     /// Vector containing the approximate solution at each mesh node for the current time step
     /// First are the values in u direction for all nodes and the the values in v direction for all nodes
@@ -310,7 +316,8 @@ private:
     /// each with it's own local function. This way assembleMatrix could be used, but this would mean that we have
     /// to iterate over all elements twice and also offset all indexes by the number of nodes for the second (y drection)
     /// matrix.
-    void assembleDivergenceMatrix();
+    template<typename RegularShape, typename DelShape, bool shouldTranspose>
+    void assembleDivergenceMatrix(SMM::CSRMatrix& out);
 
     /// Impose Dirichlet Boundary conditions on the velocity vector passed as an input
     /// @param[in, out] velocityVector Velocity vector where the Dirichlet BC will be imposed
@@ -390,6 +397,55 @@ private:
         }
     private:
         StaticMatrix<real, Shape::delSize, Shape::delSize> delPSq;
+    };
+
+    template<typename RegularShape, typename DelShape>
+    class LocalDivergenceFunctor {
+    public:
+        LocalDivergenceFunctor() {
+            auto combine = [](
+                const real xi,
+                const real eta,
+                StaticMatrix<real, RegularShape::size, DelShape::delSize>& out
+            ) -> void {
+                real p1Res[RegularShape::size] = {};
+                RegularShape::eval(xi, eta, p1Res);
+
+                StaticMatrix<real, 2, DelShape::size> delP2Res;
+                DelShape::del(xi, eta, delP2Res);
+
+                for(int i = 0; i < RegularShape::size; ++i) {
+                    for(int j = 0; j < DelShape::size; ++j) {
+                        for(int k = 0; k < 2; ++k) {
+                            out[i][j + k * DelShape::size] = p1Res[i] * delP2Res[k][j];
+                        }
+                    }
+                }
+            };
+            TriangleIntegrator::integrate(combine, combined);
+        }
+        void operator()(
+            [[maybe_unused]]const int* elementIndexes,
+            const real* elementNodes,
+            StaticMatrix<real, RegularShape::size, DelShape::size>& delXShape,
+            StaticMatrix<real, RegularShape::size, DelShape::size>& delYShape
+        ) const {
+            real J;
+            StaticMatrix<real, 2, 2> B;
+            differentialOperator(elementNodes, J, B);
+            // Compute local matrices
+            for(int p = 0; p < RegularShape::size; ++p) {
+                for(int q = 0; q < DelShape::size; ++q) {
+                    delXShape[p][q] = B[0][0] * combined[p][q] + B[0][1] * combined[p][q + DelShape::size];
+                    delYShape[p][q] = B[1][0] * combined[p][q] + B[1][1] * combined[p][q + DelShape::size];
+                }
+            }
+        }
+    private:
+        /// Matrix to hold combined values for the integrals: Integrate(psi_i(xi, eta) * dpsi_j(xi, eta)/dxi * dxi * deta) and
+        /// Integrate(psi(xi, eta) * dpsi(xi, eta)/deta * dxi * deta). Where i is in [0;p1Size-1] and j is in [0;p2Size-1]
+        /// The first p2Size entries in each row are the first integral and the second represent the second integral 
+        StaticMatrix<real, RegularShape::size, DelShape::delSize> combined;
     };
 };
 
@@ -503,11 +559,13 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
     SMM::CSRMatrix pressureDirichletWeights;
     pressureDirichletWeights.init(pressureDirichletWeightsTriplet);
      
-    assembleDivergenceMatrix();
+    assembleDivergenceMatrix<PressureShape, VelocityShape, false>(velocityDivergenceMatrix);
+    assembleDivergenceMatrix<VelocityShape, PressureShape, true>(pressureDivergenceMatrix);
 
     velocityStiffnessMatrix *= viscosity;
     const real dtInv = real(1) / dt;
-    divergenceMatrix *= -dtInv;
+    velocityDivergenceMatrix *= -dtInv;
+    pressureDivergenceMatrix *= -dtInv;
 
     const int steps = totalTime / dt;
     const int nodesCount = grid.getNodesCount();
@@ -560,7 +618,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         // Now at each time step the right hand side must be tweaked as well.
 
         // Find the right hand side
-        divergenceMatrix.rMult(currentVelocitySolution, pressureRhs);
+        velocityDivergenceMatrix.rMult(currentVelocitySolution, pressureRhs);
 
         // Now impose the Dirichlet Boundary Conditions
         pressureDrichiletIt = grid.getPressureDirichlet();
@@ -695,61 +753,43 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleConvectionMatri
 }
 
 template<typename VelocityShape, typename PressureShape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatrix() {
+template<typename RegularShape, typename DelShape, bool shouldTranspose>
+void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatrix(SMM::CSRMatrix& out) {
     const int numNodes = grid.getNodesCount();
     const int numElements = grid.getElementsCount();
-    const int elementSize = std::max(PressureShape::size, VelocityShape::size);
-
-    auto combineP1P2 = [&](const real xi, const real eta, StaticMatrix<real, PressureShape::size, VelocityShape::delSize>& out) -> void {
-        real p1Res[PressureShape::size] = {};
-        PressureShape::eval(xi, eta, p1Res);
-
-        StaticMatrix<real, 2, VelocityShape::size> delP2Res;
-        VelocityShape::del(xi, eta, delP2Res);
-
-        for(int i = 0; i < PressureShape::size; ++i) {
-            for(int j = 0; j < VelocityShape::size; ++j) {
-                for(int k = 0; k < 2; ++k) {
-                    out[i][j + k * VelocityShape::size] = p1Res[i] * delP2Res[k][j];
-                }
-            }
-        }
-    };
-    // Matrix to hold combined values for the integrals: Integrate(psi_i(xi, eta) * dpsi_j(xi, eta)/dxi * dxi * deta) and
-    // Integrate(psi(xi, eta) * dpsi(xi, eta)/deta * dxi * deta). Where i is in [0;p1Size-1] and j is in [0;p2Size-1]
-    // The first p2Size entries in each row are the first integral and the second represent the second integral 
-    StaticMatrix<real, PressureShape::size, VelocityShape::delSize> p1DelP2Combined;
-    TriangleIntegrator::integrate(combineP1P2, p1DelP2Combined);
+    const int elementSize = std::max(RegularShape::size, DelShape::size);
 
     int elementIndexes[elementSize];
     real elementNodes[2 * elementSize];
-    SMM::TripletMatrix triplet(numNodes, numNodes * 2);
-    real J;
-    StaticMatrix<real, 2, 2> B;
-    StaticMatrix<real, PressureShape::size, VelocityShape::size> b1Local;
-    StaticMatrix<real, PressureShape::size, VelocityShape::size> b2Local;
+    // IMPORTANT: The current implementation works only for P2-P1 shape function combination
+    const int velocityNodes = numNodes * 2;
+    const int pressureNodes = numNodes / 2;
+    const int rows = shouldTranspose ? velocityNodes : pressureNodes;
+    const int cols = shouldTranspose ? pressureNodes : velocityNodes;
+    SMM::TripletMatrix triplet(rows, cols);
+    StaticMatrix<real, RegularShape::size, DelShape::size> divLocalX;
+    StaticMatrix<real, RegularShape::size, DelShape::size> divLocalY;
+    LocalDivergenceFunctor<RegularShape, DelShape> localFunctor;
     for(int i = 0; i < numElements; ++i) {
         grid.getElement(i, elementIndexes, elementNodes);
-        differentialOperator(elementNodes, J, B);
+        localFunctor(elementIndexes, elementNodes, divLocalX, divLocalY);
 
-        // Compute local matrices
-        for(int p = 0; p < PressureShape::size; ++p) {
-            for(int q = 0; q < VelocityShape::size; ++q) {
-                b1Local[p][q] = B[0][0] * p1DelP2Combined[p][q] + B[0][1] * p1DelP2Combined[p][q + VelocityShape::size];
-                b2Local[p][q] = B[1][0] * p1DelP2Combined[p][q] + B[1][1] * p1DelP2Combined[p][q + VelocityShape::size];
-            }
-        }
         // Put local matrices into the global matrix
-        for(int localRow = 0; localRow < PressureShape::size; ++localRow) {
+        for(int localRow = 0; localRow < RegularShape::size; ++localRow) {
             const int globalRow = elementIndexes[localRow];
-            for(int localCol = 0; localCol < VelocityShape::size; ++localCol) {
+            for(int localCol = 0; localCol < DelShape::size; ++localCol) {
                 const int globalCol = elementIndexes[localCol];
-                triplet.addEntry(globalRow, globalCol, b1Local[localRow][localCol]);
-                triplet.addEntry(globalRow, globalCol + numNodes, b2Local[localRow][localCol]);
+                if constexpr (shouldTranspose) {
+                    triplet.addEntry(globalCol, globalRow, divLocalX.element(localRow, localCol));
+                    triplet.addEntry(globalCol, globalRow + numNodes, divLocalY.element(localRow, localCol));
+                } else {
+                    triplet.addEntry(globalRow, globalCol, divLocalX.element(localRow, localCol));
+                    triplet.addEntry(globalRow, globalCol + numNodes, divLocalY.element(localRow, localCol));
+                }
             }
         }
     }
-    divergenceMatrix.init(triplet);
+    out.init(triplet);
 }
 
 }
