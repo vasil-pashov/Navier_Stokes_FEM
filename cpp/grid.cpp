@@ -13,11 +13,14 @@ int FemGrid2D::loadJSON(const char* filePath) {
         return 1;
     }
     elementsCount = data["elementsCount"];
-    nodesCount = data["nodesCount"];
+    velocityNodesCount = data["velocityNodesCount"];
+    assert(velocityNodesCount > 0);
+    pressureNodesCount = data["pressureNodesCount"];
+    assert(pressureNodesCount > 0);
     elementSize = data["elementSize"];
     elements.reserve(elementsCount * elementSize);
-    nodes.reserve(nodesCount * 2);
-    for(int i = 0; i < nodesCount; ++i) {
+    nodes.reserve(velocityNodesCount * 2);
+    for(int i = 0; i < velocityNodesCount; ++i) {
         assert(data["nodes"][i].size() == 2 && "Expected 2D grid. All nodes must be of (x, y) pairs of size 2");
         nodes.insert(nodes.end(), data["nodes"][i].begin(), data["nodes"][i].end());
     }
@@ -25,7 +28,7 @@ int FemGrid2D::loadJSON(const char* filePath) {
         assert(elementSize == static_cast<int>(data["elements"][i].size()) && "Mismatch between declared element size and actual element size");
         elements.insert(elements.end(), data["elements"][i].begin(), data["elements"][i].end());
     }
-    assert(static_cast<int>(nodes.size()) == nodesCount * 2);
+    assert(static_cast<int>(nodes.size()) == velocityNodesCount * 2);
     assert(static_cast<int>(elements.size()) == elementSize * elementsCount);
 
     const int velocityDirichletSize = data["uDirichlet"].size();

@@ -10,6 +10,7 @@
 int main() {
     NSFem::FemGrid2D grid;
     grid.loadJSON("/home/vasil/Documents/FMI/Магистратура/Дипломна/CPP/Assests/mesh_small.json");
-    NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(std::move(grid), 0.01, 0.001);
-    assembler.solve(1.0f);
+    const std::string outFolder("/home/vasil/Documents/FMI/Магистратура/Дипломна/CPP/Assests/mesh_small_out");
+    NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(std::move(grid), 0.01, 0.001, outFolder);
+    assembler.solve(0.1);
 }

@@ -9,12 +9,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(
-	WITH_ADRESS_SANITIZER
+	WITH_ADDRESS_SANITIZER
 	OFF CACHE BOOL
 	"If ON the project will be compiled with address sanitizer (it will run slow). For now it's clang only"
 )
 
-if(${WITH_ADRESS_SANITIZER})
+if(${WITH_ADDRESS_SANITIZER})
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		set(_sanitizer_flags "-g -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -O0")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_sanitizer_flags}")

@@ -56,6 +56,8 @@ public:
     };
     /// Return the number of nodes in the mesh
     int getNodesCount() const;
+    /// Return the number of pressure nodes in the mesh
+    int getPressureNodesCount() const;
     /// Return the number of elements in the mesh
     int getElementsCount() const;
     /// Return the total number of indexes used to describe the elements.
@@ -100,8 +102,11 @@ protected:
     int elementsCount;
     /// Number of nodes which represent a specific element.
     int elementSize;
-    /// The nuber of nodes in the mesh
-    int nodesCount;
+    /// The number of velocity nodes in the mesh. This is the same as the total number of nodes in the mesh
+    int velocityNodesCount;
+    /// The number of pressure nodes in the mesh. Pressure nodes are a subset of the velocity nodes.
+    int pressureNodesCount;
+
 
     std::vector<VelocityDirichlet> velocityDirichlet;
     std::vector<PressureDirichlet> pressureDirichlet;
@@ -124,7 +129,11 @@ inline FemGrid2D::PressureDirichletConstIt FemGrid2D::getPressureDirichlet() con
 }
 
 inline int FemGrid2D::getNodesCount() const {
-    return nodesCount;
+    return velocityNodesCount;
+}
+
+inline int FemGrid2D::getPressureNodesCount() const {
+    return pressureNodesCount;
 }
 
 inline const real* FemGrid2D::getNodesBuffer() const {
