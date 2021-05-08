@@ -7,10 +7,18 @@
 #include "error_code.h"
 #include "expression.h"
 
-int main() {
-    NSFem::FemGrid2D grid;
-    grid.loadJSON("/home/vasil/Documents/FMI/Магистратура/Дипломна/CPP/Assests/mesh_small.json");
-    const std::string outFolder("/home/vasil/Documents/FMI/Магистратура/Дипломна/CPP/Assests/mesh_small_out");
-    NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(std::move(grid), 0.01, 0.001, outFolder);
-    assembler.solve(0.1);
+int main(int nargs, char** cargs) {
+    if(nargs == 1) {
+        printf("Missing path to a FEM grid.");
+        return 1;
+    } else if(nargs == 2) {
+        printf("Missing output folder path.");
+        return 1;
+    } else {
+        NSFem::FemGrid2D grid;
+        grid.loadJSON(cargs[1]);
+        NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(std::move(grid), 0.01, 0.001, cargs[2]);
+        assembler.solve(1.0f);
+    }
+
 }
