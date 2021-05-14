@@ -616,6 +616,17 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
 
     exportSolution(0);
 
+    SMM::CSRMatrix::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
+    {
+        const int preconditionError = velocityMassIC0.init();
+        assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
+    }
+    SMM::CSRMatrix::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
+    {
+        const int preconditionError = pressureStiffnessIC0.init();
+        assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
+    }
+
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
         // Convection is the convection matrix formed by (dot(u_h, del(fi_i)), fi_j) : forall i, j in 0...numVelocityNodes - 1
         // Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
@@ -642,11 +653,25 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
 
         // Solve for the u component
-        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, velocityRhs, currentVelocitySolution, -1, 1e-6);
+        solveStatus = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            velocityRhs,
+            currentVelocitySolution,
+            -1,
+            1e-6,
+            velocityMassIC0
+        );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
         // Solve for the v component
-        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, velocityRhs + nodesCount, currentVelocitySolution + nodesCount, -1, 1e-6);
+        solveStatus = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            velocityRhs + nodesCount,
+            currentVelocitySolution + nodesCount,
+            -1,
+            1e-6,
+            velocityMassIC0
+        );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
         imposeVelocityDirichlet(currentVelocitySolution);
@@ -681,7 +706,14 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         }
 
         // Finally solve the linear system for the pressure
-        solveStatus = SMM::ConjugateGradient(pressureStiffnessMatrix, pressureRhs, currentPressureSolution, -1, 1e-6);
+        solveStatus = SMM::ConjugateGradient(
+            pressureStiffnessMatrix,
+            pressureRhs,
+            currentPressureSolution,
+            -1,
+            1e-6,
+            pressureStiffnessIC0
+        );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
         // Combine the tentative velocity and the pressure to find the real velocity at time step i + 1
@@ -693,11 +725,25 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         pressureDivergenceMatrix.rMultAdd(velocityRhs, currentPressureSolution, velocityRhs);
 
         // Solve for the u component
-        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, velocityRhs, currentVelocitySolution, -1, 1e-6);
+        solveStatus = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            velocityRhs,
+            currentVelocitySolution,
+            -1,
+            1e-6,
+            velocityMassIC0
+        );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
         // Solve for the v component
-        solveStatus = SMM::ConjugateGradient(velocityMassMatrix, velocityRhs + nodesCount, currentVelocitySolution + nodesCount, -1, 1e-6);
+        solveStatus = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            velocityRhs + nodesCount,
+            currentVelocitySolution + nodesCount,
+            -1,
+            1e-6,
+            velocityMassIC0
+        );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
         // Prepare the velocity rhs vector for the next iteration
