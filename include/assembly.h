@@ -611,6 +611,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
     imposeVelocityDirichlet(currentVelocitySolution);
     SMM::Vector velocityRhs(nodesCount * 2, 0);
     SMM::Vector pressureRhs(grid.getPressureNodesCount(), real(0));
+    SMM::Vector tmp(nodesCount);
 
     std::unordered_map<char, float> pressureVars;
 
@@ -636,43 +637,63 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         // TODO: Do not allocate space on each iteration, but reuse the matrix sparse structure
         SMM::CSRMatrix convectionMatrix;
         assembleConvectionMatrix(convectionMatrix);
+
+        // Find the tentative velocity. The system is:
+        // velocityMassMatrix.tentative = 
+        //      = velocityMassMatrix.currentVelocitySolution 
+        //       -dt * (convectionMatrix + viscosity * velocityStiffness).currentVelocitySolution
+        // Note that on the right hand side the currentVelocitySolution is multiplied by the velocity mass matrix. So we can rewrite
+        // the linear system as follows:
+        // velocityMassMatrix.y = -dt * (convectionMatrix + viscosity * velocityStiffness).currentVelocitySolutions
+        // y = tentative - currentVelocitySolution
+        // tentative = y + currentVelocitySolution
+        // Doing this seems to improve the stability of the method
+
+        // Assemble tentative velocity system rhs
         assert(convectionMatrix.hasSameNonZeroPattern(velocityMassMatrix) && convectionMatrix.hasSameNonZeroPattern(velocityStiffnessMatrix));
         SMM::CSRMatrix::ConstIterator convectionIt = convectionMatrix.begin();
-        SMM::CSRMatrix::ConstIterator massIt = velocityMassMatrix.begin();
         SMM::CSRMatrix::ConstIterator velStiffnessIt = velocityStiffnessMatrix.begin();
-        // TODO: The expression for the right-hand side in matrix form is: velocityMass - dt * (viscosity * velocityStiffness + convection)
-        // velocity mass and velocity stifness are constant matrices. They can be combined before the iterations start.
-        for(;convectionIt != convectionMatrix.end(); ++convectionIt, ++massIt, ++velStiffnessIt) {
+        for(;convectionIt != convectionMatrix.end(); ++convectionIt, ++velStiffnessIt) {
             const int row = convectionIt->getRow();
             const int col = convectionIt->getCol();
             const real uVal = currentVelocitySolution[col];
             const real vVal = currentVelocitySolution[col + nodesCount];
-            velocityRhs[row] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * uVal;
-            velocityRhs[row + nodesCount] += (massIt->getValue() - dt * (convectionIt->getValue() + velStiffnessIt->getValue())) * vVal;
+            const real matrixPart = -dt * (convectionIt->getValue() + velStiffnessIt->getValue());
+            velocityRhs[row] += matrixPart * uVal;
+            velocityRhs[row + nodesCount] += matrixPart * vVal;
         }
+
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
 
-        // Solve for the u component
+        // Solve for the u component.
         solveStatus = SMM::ConjugateGradient(
             velocityMassMatrix,
             velocityRhs,
             currentVelocitySolution,
+            tmp,
             -1,
             1e-6,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
+        for(int i = 0; i < nodesCount; ++i) {
+            currentVelocitySolution[i] += tmp[i];
+        }
 
         // Solve for the v component
         solveStatus = SMM::ConjugateGradient(
             velocityMassMatrix,
             velocityRhs + nodesCount,
             currentVelocitySolution + nodesCount,
+            tmp,
             -1,
             1e-6,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
+        for(int i = 0; i < nodesCount; ++i) {
+            currentVelocitySolution[i + nodesCount] += tmp[i];
+        }
 
         imposeVelocityDirichlet(currentVelocitySolution);
        
@@ -710,41 +731,52 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
             pressureStiffnessMatrix,
             pressureRhs,
             currentPressureSolution,
+            currentPressureSolution,
             -1,
             1e-6,
             pressureStiffnessIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
-        // Combine the tentative velocity and the pressure to find the real velocity at time step i + 1
-        // TODO: If we split the solution to velocityMassMatrix(x1 + x2) = b1 + b2 = 
-        // velocityMassMatrix.(x1 + x2) = velocityMassMatrix.currentVelocitySolution - 1/dt * pressureDivergenceMatrix.currentPressure = 
-        // x1 + x2 = currentVelocitySolution - currentVelocitySolution^-1.(1/dt * pressureDivergenceMatrix.currentPressure)
-        // Then we can solve only for currentVelocitySolution^-1.(1/dt * pressureDivergenceMatrix.currentPressure)
-        velocityMassMatrix.rMult(currentVelocitySolution, velocityRhs);
-        pressureDivergenceMatrix.rMultAdd(velocityRhs, currentPressureSolution, velocityRhs);
+
+
+        // Combine the tentative velocity and the pressure to find the actual velocity. The system is:
+        // velocityMassMatrix.currentVelocitySolution = velocityMassMatrix.tentative - dt * pressureDivergenceMatrix.currentPressureSolution
+        // Note that on the right hand side the tentative velocity is multiplied by the velocity mass matrix.
+        // velocityMassMatrix.y = - dt * pressureDivergenceMatrix.currentPressureSolution
+        // y = currentVelocitySolution - tentative
+        // currentVelocitySolution = y + tentative
+        pressureDivergenceMatrix.rMult(currentPressureSolution, velocityRhs);
 
         // Solve for the u component
         solveStatus = SMM::ConjugateGradient(
             velocityMassMatrix,
             velocityRhs,
             currentVelocitySolution,
+            tmp,
             -1,
             1e-6,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
+        for(int i = 0; i < nodesCount; ++i) {
+            currentVelocitySolution[i] += tmp[i];
+        }
 
         // Solve for the v component
         solveStatus = SMM::ConjugateGradient(
             velocityMassMatrix,
             velocityRhs + nodesCount,
             currentVelocitySolution + nodesCount,
+            tmp,
             -1,
             1e-6,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
+        for(int i = 0; i < nodesCount; ++i) {
+            currentVelocitySolution[i + nodesCount] += tmp[i];
+        }
 
         // Prepare the velocity rhs vector for the next iteration
         velocityRhs.fill(0);
