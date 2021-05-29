@@ -8,7 +8,7 @@ namespace NSFem {
 
 int FemGrid2D::loadJSON(const char* filePath) {
     std::ifstream jsonFile(filePath);
-    nlohmann::basic_json data = nlohmann::json::parse(jsonFile, nullptr, false);
+    auto data = nlohmann::json::parse(jsonFile, nullptr, false);
     if(data.is_discarded()) {
         return 1;
     }

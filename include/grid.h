@@ -171,5 +171,4 @@ inline int FemGrid2D::PressureDirichlet::getSize() const {
 inline const int* FemGrid2D::PressureDirichlet::getNodeIndexes() const {
     return nodeIndexes.data();
 }
-
 }

@@ -4,8 +4,26 @@
 #include <grid.h>
 #include "static_matrix.h"
 #include <string>
+#include <nlohmann/json.hpp>
 
 namespace NSFem {
+
+/// Draw 2D vector plot of the velocity field and save it as an image in the specified path
+/// @param[in] grid The grid where the simulation was done
+/// @param[in] uVec The velocity in u direction. Ordered the same way as the nodes in the grid are.
+/// @param[in] vVec The velocity in v direction. Ordered the same way as the nodes in the grid are.
+/// @param[in] path Path where the image must be saved. (Will not create missing folders on the path)
+/// @param[in] width The width of the resulting image in pixels
+/// @param[in] height The height of the resulting image in pixels
+void drawVectorPlot(
+    const FemGrid2D& grid,
+    const SMM::real* const uVec,
+    const SMM::real* const vVec,
+    const std::string& path,
+    const int width,
+    const int height
+);
+
 
 using real = double;
 
@@ -479,6 +497,17 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
     } else {
         assert(false && "Failed to open file for writing the result");
     }
+
+    const std::string& velocityFieldPath = outFolder + "/velocity_field_" + std::to_string(timeStep) + ".jpeg";
+    drawVectorPlot(
+        grid,
+        currentVelocitySolution,
+        currentVelocitySolution + grid.getNodesCount(),
+        velocityFieldPath.c_str(),
+        1024,
+        768
+    );
+    
 }
 
 template<typename VelocityShape, typename PressureShape>
