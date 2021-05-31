@@ -24,14 +24,38 @@ void drawVectorPlot(
     const int height
 );
 
+struct Point2D {
+    Point2D() : x(0), y(0) {}
+    Point2D(real x, real y) : x(x), y(y) {}
+    Point2D operator+(const Point2D& other) const {
+        return Point2D(x + other.x, y + other.y);
+    }
+    Point2D operator-(const Point2D& other) const {
+        return Point2D(x - other.x, y - other.y);
+    }
+    Point2D operator*(const real scalar) const {
+        return Point2D(x * scalar, y * scalar);
+    }
+    /// Find the squared distance to another 2D point
+    real distToSq(const Point2D& other) const {
+        return (x - other.x)*(x - other.x) + (y - other.y)*(y - other.y);
+    }
+    real x, y;
+};
+
+/// Check if a 2D point p lies inside the triangle formed by point A, B and C
+/// @param[in] P The point which is goint to be tested
+/// @param[in] A First vertex of the triangle
+/// @param[in] B Second vertex of the triangle
+/// @param[in] C Third vertex of the triangle
+/// @retval true if the point lies in the triangle, false othwerwise
+bool isPointInTriagle(const Point2D& p, const Point2D& A, const Point2D& B, const Point2D& C);
 
 using real = double;
 
 /// Find the determinant of the Jacobi matrix for a linear transformation of random triangle to the unit one
-/// @param[in] kx World x coordinate of the node which will be transformed to (0, 0)
-/// @param[in] ky World y coordinate of the node which will be transformed to (0, 0)
-/// @param[in] lx World x coordinates of the node which will be transformed to (1, 1)
-/// @param[in] my World y coordinates of the node which will be transformed to (0, 1)
+/// @param[in] elementNodes List of (x, y) coordinates in world space of the points which are going to be transformed.
+/// The order is (0, 0), (1, 1), (0, 1)
 /// @return The determinant of the Jacobi matrix which transforms k, l, m to the unit triangle
 inline real linTriangleTmJacobian(const real* elementNodes) {
     const real xk = elementNodes[0];
@@ -242,6 +266,7 @@ class NavierStokesAssembly {
 public:
     NavierStokesAssembly(FemGrid2D&& grid, const real dt, const real viscosity, const std::string& outFolder);
     void solve(const float totalTime);
+    void semiLagrangianSolve(const float totalTime);
 private:
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
@@ -355,6 +380,20 @@ private:
     /// The vector must have all its u-velocity components at the begining, followed by all
     /// v-velocity components.
     void imposeVelocityDirichlet(SMM::Vector& velocityVector);
+
+    /// Use the semi-Lagrangian method to find the approximate value for the advectable quantities (velocity)
+    /// The semi-Lagrangian method approximates directly the material derivative D()/Dt=0. For this method we are
+    /// thinking in Lagrangian perspective. We imagine that the fluid as particles and at each grid point we measure
+    /// the velocity of some particle, so to find the velocity at some point in space (x, y) at time step i+1, would
+    /// require us to find a particle which at time point i was at some position (x1, y1), but has moved to (x, y) in
+    /// time step i+1. Since each particle has a velocity and it "moves with the particle", the velocity of the particle
+    /// which has moved to (x, y) at i+1 will be the velocity which we want to find.
+    void advect(
+        const real* const uVelocity,
+        const real* const vVelocity,
+        real* const uVelocityOut,
+        real* const vVelocityOut
+    );
 
     template<typename Shape>
     struct LocalStiffnessFunctor {
@@ -504,8 +543,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         currentVelocitySolution,
         currentVelocitySolution + grid.getNodesCount(),
         velocityFieldPath.c_str(),
-        1024,
-        768
+        1920,
+        1080
     );
     
 }
@@ -816,6 +855,216 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
 }
 
 template<typename VelocityShape, typename PressureShape>
+void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(const float totalTime) {
+    
+    assemblVelocityMassMatrix();
+
+    // Assemble global velocity stiffness matrix
+    LocalStiffnessFunctor<VelocityShape> localVelocityStiffness;
+    assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, velocityStiffnessMatrix);
+
+    // Assemble global pressure stiffness matrix.
+    const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
+    // The key is the node index, the value is which boundary it belongs to
+    // This is used during the assembling to check if a node belongs to a boundary
+    // Since a node can belong to one and only one boundary we have vector of unordered
+    // triplet matrices which will hold the weights
+    std::unordered_set<int> allBoundaryNodes;
+    FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichlet();
+    for(int i = 0; i < numPressureDirichletBoundaries; ++i, ++pressureDrichiletIt) {
+        const int* boundary = pressureDrichiletIt->getNodeIndexes();
+        const int boundarySize = pressureDrichiletIt->getSize();
+        allBoundaryNodes.insert(boundary, boundary + boundarySize);
+
+    }
+    
+    SMM::TripletMatrix pressureDirichletWeightsTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
+    LocalStiffnessFunctor<PressureShape> localPressureStuffness;
+    SMM::TripletMatrix pressureStiffnessTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
+    assembleBCMatrix<PressureShape::size, PressureShape::size>(
+        localPressureStuffness,
+        allBoundaryNodes,
+        pressureStiffnessTriplet,
+        pressureDirichletWeightsTriplet
+    );
+    pressureStiffnessMatrix.init(pressureStiffnessTriplet);
+    SMM::CSRMatrix pressureDirichletWeights;
+    pressureDirichletWeights.init(pressureDirichletWeightsTriplet);
+     
+    assembleDivergenceMatrix<PressureShape, VelocityShape, true>(velocityDivergenceMatrix);
+    assembleDivergenceMatrix<VelocityShape, PressureShape, false>(pressureDivergenceMatrix);
+
+    velocityStiffnessMatrix *= -(viscosity * dt);
+    const real dtInv = real(1) / dt;
+    velocityDivergenceMatrix *= -dtInv;
+    pressureDivergenceMatrix *= -dt;
+
+    const int steps = totalTime / dt;
+    const int nodesCount = grid.getNodesCount();
+    currentVelocitySolution.init(nodesCount * 2, 0.0f);
+    currentPressureSolution.init(grid.getPressureNodesCount(), real(0));
+    imposeVelocityDirichlet(currentVelocitySolution);
+    SMM::Vector velocityRhs(nodesCount * 2, 0);
+    SMM::Vector pressureRhs(grid.getPressureNodesCount(), real(0));
+    SMM::Vector tmp(nodesCount * 2, 0);
+
+    std::unordered_map<char, float> pressureVars;
+
+    exportSolution(0);
+
+    SMM::CSRMatrix::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
+    {
+        const int preconditionError = velocityMassIC0.init();
+        assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
+    }
+    SMM::CSRMatrix::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
+    {
+        const int preconditionError = pressureStiffnessIC0.init();
+        assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
+    }
+
+    for(int timeStep = 1; timeStep < steps; ++timeStep) {
+        SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
+// ==================================================================================
+// =============================== ADVECTION ========================================
+// ==================================================================================
+        advect(
+            currentVelocitySolution,
+            currentVelocitySolution + nodesCount,
+            tmp,
+            tmp + nodesCount
+        );        
+
+// ==================================================================================
+// ============================== PRESSURE SOLVE ====================================
+// ==================================================================================
+
+        // Solve for the pressure. As pressure is "implicitly" stepped Dirchlet boundary conditions cannot be imposed after
+        // solving the linear system. For this reason the pressure stiffness matrix was tweaked before time iterations begin.
+        // Now at each time step the right hand side must be tweaked as well.
+
+        // Find the right hand side
+        velocityDivergenceMatrix.rMult(tmp, pressureRhs);
+
+        // Now impose the Dirichlet Boundary Conditions
+        pressureDrichiletIt = grid.getPressureDirichlet();
+        for(int boundaryIndex = 0; boundaryIndex < numPressureDirichletBoundaries; ++boundaryIndex, ++pressureDrichiletIt) {
+            const FemGrid2D::PressureDirichlet& boundary = *pressureDrichiletIt;
+            for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+                const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+                const real x = grid.getNodesBuffer()[nodeIndex * 2];
+                const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+                pressureVars['x'] = x;
+                pressureVars['y'] = y;
+                float pBoundary = 0;
+                boundary.eval(&pressureVars, pBoundary);
+                pressureRhs[nodeIndex] = pBoundary;
+                SMM::CSRMatrix::ConstRowIterator it = pressureDirichletWeights.rowBegin(nodeIndex);
+                const SMM::CSRMatrix::ConstRowIterator end = pressureDirichletWeights.rowEnd(nodeIndex);
+                while(it != end) {
+                    pressureRhs[it->getCol()] -= it->getValue() * pBoundary;
+                    ++it;
+                }
+            }
+        }
+
+        // Finally solve the linear system for the pressure
+        solveStatus = SMM::ConjugateGradient(
+            pressureStiffnessMatrix,
+            pressureRhs,
+            currentPressureSolution,
+            currentPressureSolution,
+            -1,
+            1e-6,
+            pressureStiffnessIC0
+        );
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+
+        // Combine the tentative velocity and the pressure to find the actual velocity. The system is:
+        // velocityMassMatrix.currentVelocitySolution = velocityMassMatrix.tentative - dt * pressureDivergenceMatrix.currentPressureSolution
+        // Note that on the right hand side the tentative velocity is multiplied by the velocity mass matrix.
+        // velocityMassMatrix.y = - dt * pressureDivergenceMatrix.currentPressureSolution
+        // y = currentVelocitySolution - tentative
+        // currentVelocitySolution = y + tentative
+        pressureDivergenceMatrix.rMult(currentPressureSolution, velocityRhs);
+
+        // Solve for the u component
+        solveStatus = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            velocityRhs,
+            tmp,
+            currentVelocitySolution,
+            -1,
+            1e-6,
+            velocityMassIC0
+        );
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+        for(int i = 0; i < nodesCount; ++i) {
+            currentVelocitySolution[i] += tmp[i];
+        }
+
+        // Solve for the v component
+        solveStatus = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            velocityRhs + nodesCount,
+            tmp + nodesCount,
+            currentVelocitySolution + nodesCount,
+            -1,
+            1e-6,
+            velocityMassIC0
+        );
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+        for(int i = 0; i < nodesCount; ++i) {
+            currentVelocitySolution[i + nodesCount] += tmp[i + nodesCount];
+        }
+
+
+// ==================================================================================
+// ============================= DIFFUSION SOLVE ====================================
+// ==================================================================================
+        velocityStiffnessMatrix.rMult(currentVelocitySolution, velocityRhs);
+
+        solveStatus = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            velocityRhs,
+            currentVelocitySolution,
+            tmp,
+            -1,
+            1e-6,
+            velocityMassIC0
+        );
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+        for(int i = 0; i < nodesCount; ++i) {
+            currentVelocitySolution[i] += tmp[i];
+        }
+
+        solveStatus = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            velocityRhs + nodesCount,
+            currentVelocitySolution + nodesCount,
+            tmp + nodesCount,
+            -1,
+            1e-6,
+            velocityMassIC0
+        );
+
+        for(int i = 0; i < nodesCount; ++i) {
+            currentVelocitySolution[i + nodesCount] += tmp[i + nodesCount];
+        }
+
+        imposeVelocityDirichlet(currentVelocitySolution);
+
+
+        // Prepare the velocity rhs vector for the next iteration
+        // velocityRhs.fill(0);
+        // There is no need to fill the pressure rhs as the matrix vector product does not need it to be 0
+
+        exportSolution(timeStep);
+
+    }
+}
+
+template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::imposeVelocityDirichlet(SMM::Vector& velocityVector) {
     const int nodesCount = grid.getNodesCount();
     const int velocityDirichletCount = grid.getVelocityDirichletSize();
@@ -956,6 +1205,94 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatri
         }
     }
     out.init(triplet);
+}
+
+template<typename VelocityShape, typename PressureShape>
+void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
+    const real* const uVelocity,
+    const real* const vVelocity,
+    real* const uVelocityOut,
+    real* const vVelocityOut
+) {
+    const int velocityNodesCount = grid.getNodesCount();
+    const real* velocityNodes = grid.getNodesBuffer();
+    const int elementsCount = grid.getElementsCount();
+
+    static_assert(VelocityShape::size == 6, "Only P2-P1 elements are supported");
+    assert(grid.getElementSize() == VelocityShape::size && "Only P2-P1 elements are supported");
+    Point2D elementNodes[VelocityShape::size];
+    int elementIndexes[VelocityShape::size];
+
+    auto updateClosestPoint = [&elementNodes, &elementIndexes, &uVelocity, &vVelocity](const Point2D& p, real& minDistSq, real& u, real& v) {
+        for(int i = 0; i < VelocityShape::size; ++i) {
+            const real currentDistSq = p.distToSq(elementNodes[i]);
+            if(minDistSq > currentDistSq) {
+                minDistSq = currentDistSq;
+                u = uVelocity[elementIndexes[i]];
+                v = vVelocity[elementIndexes[i]];
+            }
+        }
+    };
+
+    for(int i = 0; i < velocityNodesCount; ++i) {
+        const Point2D position(velocityNodes[2*i], velocityNodes[2*i + 1]);
+        const Point2D velocity(uVelocity[i], vVelocity[i]);
+        const Point2D start = position - velocity * dt;
+
+        real uResult = 0, vResult = 0, minDistSq = std::numeric_limits<real>::infinity();
+        for(int j = 0; j < elementsCount; ++j) {
+            grid.getElement(j, elementIndexes, reinterpret_cast<real*>(elementNodes));
+            // Check if start lies inside an element. This uses the barrycentric coordinates to check if a point lies in a triangle.
+            // Since we are in 2D we can describe point p as a linear combination of two vectors, we choose
+            // them to be AB and AC. We want (0, 0) in this new space to be the point A
+            // p = A + l1*AB + l2*AC
+            // |px|  = |Ax + l1(Bx - Ax) + l2(Cx - Ax)|
+            // |py|  = |Ay + l1(By - Ay) + l2(Cy - Ay)|
+            //
+            // |px - ax| = |Bx - Ax  Cx - Ax||l1|
+            // |py - ay| = |By - Ay  Cy - Ay||l2|
+            //
+            // |l1| = 1/D * |Cy - Ay  Ax - Cx||px - ax|
+            // |l2| = 1/D * |Ay - By  Bx - Ax||py - ay|
+            const Point2D AB = elementNodes[1] - elementNodes[0];
+            const Point2D AC = elementNodes[2] - elementNodes[0];
+            const Point2D AP = start - elementNodes[0];
+            const real D = (AB.x * AC.y) - (AB.y * AC.x);
+            assert(D != 0);
+            const int DSign = D > 0 ? 1 : -1;
+            // We do not want to divide by the determinant, so when we solve the system we get the result
+            // scaled by the determinant.
+            const real scaledBarry1 =  (AP.x * AC.y - AP.y * AC.x) * DSign;
+            if(scaledBarry1 < 0 || scaledBarry1 > D) {
+                updateClosestPoint(start, minDistSq, uResult, vResult);
+                continue;
+            }
+            const real scaledBarry2 = (AP.y * AB.x - AP.x * AB.y) * DSign;
+            if(scaledBarry2 < 0 || scaledBarry1 > D - scaledBarry2) {
+                updateClosestPoint(start, minDistSq, uResult, vResult);
+                continue;
+            }
+            
+            // When we reach this point we know that the point "start" is inside the triangle
+            // We need to scale down the barrycentroc coords and we'll get the point inside the triangle
+            const real dInv = 1 / std::abs(D);
+            const real xi = scaledBarry1 * dInv;
+            const real eta = scaledBarry2 * dInv;
+            
+            real interpolationCoefficients[VelocityShape::size];
+            VelocityShape::eval(xi, eta, interpolationCoefficients);
+            real uInterpolated = 0, vInterpolated = 0;
+            for(int k = 0; k < VelocityShape::size; ++k) {
+                uInterpolated += interpolationCoefficients[k] * uVelocity[elementIndexes[k]];
+                vInterpolated += interpolationCoefficients[k] * vVelocity[elementIndexes[k]];
+            }
+            uResult = uInterpolated;
+            vResult = vInterpolated;
+            break;
+        }
+        uVelocityOut[i] = uResult;
+        vVelocityOut[i] = vResult;
+    }
 }
 
 }
