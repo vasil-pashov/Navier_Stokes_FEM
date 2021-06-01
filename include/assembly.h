@@ -267,6 +267,9 @@ public:
     NavierStokesAssembly(FemGrid2D&& grid, const real dt, const real viscosity, const std::string& outFolder);
     void solve(const float totalTime);
     void semiLagrangianSolve(const float totalTime);
+    void setTimeStep(const real dt);
+    void setOutputDir(std::string outputDir);
+    void setOutputDir(std::string&& outputDir);
 private:
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
@@ -514,6 +517,22 @@ private:
 };
 
 template<typename VelocityShape, typename PressureShape>
+void NavierStokesAssembly<VelocityShape, PressureShape>::setTimeStep(const real dt) {
+    this->dt = dt;
+}
+
+template<typename VelocityShape, typename PressureShape>
+void NavierStokesAssembly<VelocityShape, PressureShape>::setOutputDir(std::string outputDir) {
+    this->outFolder = std::move(outputDir);
+}
+
+template<typename VelocityShape, typename PressureShape>
+void NavierStokesAssembly<VelocityShape, PressureShape>::setOutputDir(std::string&& outputDir) {
+    this->outFolder = std::move(outputDir);
+}
+
+
+template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const int timeStep) {
     const int nodesCount = grid.getNodesCount();
      nlohmann::json outJSON = {
@@ -696,6 +715,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
     }
 
+    const real eps = 1e-8;
+
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
         // Convection is the convection matrix formed by (dot(u_h, del(fi_i)), fi_j) : forall i, j in 0...numVelocityNodes - 1
         // Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
@@ -740,7 +761,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
             currentVelocitySolution,
             tmp,
             -1,
-            1e-6,
+            eps,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
@@ -755,7 +776,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
             currentVelocitySolution + nodesCount,
             tmp,
             -1,
-            1e-6,
+            eps,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
@@ -801,7 +822,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
             currentPressureSolution,
             currentPressureSolution,
             -1,
-            1e-6,
+            eps,
             pressureStiffnessIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
@@ -823,7 +844,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
             currentVelocitySolution,
             tmp,
             -1,
-            1e-6,
+            eps,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
@@ -838,7 +859,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
             currentVelocitySolution + nodesCount,
             tmp,
             -1,
-            1e-6,
+            eps,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
@@ -850,8 +871,11 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         velocityRhs.fill(0);
         // There is no need to fill the pressure rhs as the matrix vector product does not need it to be 0
 
-        exportSolution(timeStep);;
+        exportSolution(timeStep);
     }
+
+    currentVelocitySolution.deinit();
+    currentPressureSolution.deinit();
 }
 
 template<typename VelocityShape, typename PressureShape>
@@ -923,6 +947,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
         assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
     }
 
+    const real eps = 1e-8;
+
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
 // ==================================================================================
@@ -975,7 +1001,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
             currentPressureSolution,
             currentPressureSolution,
             -1,
-            1e-6,
+            eps,
             pressureStiffnessIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
@@ -995,7 +1021,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
             tmp,
             currentVelocitySolution,
             -1,
-            1e-6,
+            eps,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
@@ -1010,7 +1036,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
             tmp + nodesCount,
             currentVelocitySolution + nodesCount,
             -1,
-            1e-6,
+            eps,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
@@ -1030,7 +1056,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
             currentVelocitySolution,
             tmp,
             -1,
-            1e-6,
+            eps,
             velocityMassIC0
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
@@ -1044,7 +1070,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
             currentVelocitySolution + nodesCount,
             tmp + nodesCount,
             -1,
-            1e-6,
+            eps,
             velocityMassIC0
         );
 
@@ -1062,6 +1088,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
         exportSolution(timeStep);
 
     }
+
+    currentPressureSolution.deinit();
+    currentVelocitySolution.deinit();
 }
 
 template<typename VelocityShape, typename PressureShape>

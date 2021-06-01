@@ -59,7 +59,7 @@ target_link_libraries(${PROJECT_NAME} INTERFACE sparse_matrix_math::sparse_matri
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json opencv::opencv)
 
 if(NOT MSVC)
-	target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -pedantic)
+	target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -pedantic $<$<CONFIG:DEBUG>:-fno-limit-debug-info>)
 endif()
 
 if(${WITH_GBENCH})
