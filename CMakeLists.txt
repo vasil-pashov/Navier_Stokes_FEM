@@ -14,6 +14,12 @@ set(
 	"If ON the project will be compiled with address sanitizer (it will run slow). For now it's clang only"
 )
 
+set(
+	WITH_PERF
+	OFF CACHE BOOL
+	"If ON additional compiler flags will be set so that the executable could be profiled with perf"
+)
+
 if(${WITH_ADDRESS_SANITIZER})
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		set(_sanitizer_flags "-g -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -O0")
@@ -59,10 +65,16 @@ target_link_libraries(${PROJECT_NAME} INTERFACE sparse_matrix_math::sparse_matri
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json opencv::opencv)
 
 if(NOT MSVC)
-	target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -pedantic $<$<CONFIG:DEBUG>:-fno-limit-debug-info>)
+	target_compile_options(${PROJECT_NAME} PRIVATE 
+		-Wall -Wextra -pedantic $<$<CONFIG:DEBUG>:-fno-limit-debug-info> -fno-exceptions -fno-rtti
+	)
 endif()
 
 if(${WITH_GBENCH})
 	find_package(benchmark REQUIRED CONFIG)
 	target_link_libraries(${PROJECT_NAME} PRIVATE benchmark::benchmark)
+endif()
+
+if(${WITH_PERF})
+	target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer -g -shared-libgcc)
 endif()

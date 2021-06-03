@@ -1252,23 +1252,13 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     Point2D elementNodes[VelocityShape::size];
     int elementIndexes[VelocityShape::size];
 
-    auto updateClosestPoint = [&elementNodes, &elementIndexes, &uVelocity, &vVelocity](const Point2D& p, real& minDistSq, real& u, real& v) {
-        for(int i = 0; i < VelocityShape::size; ++i) {
-            const real currentDistSq = p.distToSq(elementNodes[i]);
-            if(minDistSq > currentDistSq) {
-                minDistSq = currentDistSq;
-                u = uVelocity[elementIndexes[i]];
-                v = vVelocity[elementIndexes[i]];
-            }
-        }
-    };
-
     for(int i = 0; i < velocityNodesCount; ++i) {
         const Point2D position(velocityNodes[2*i], velocityNodes[2*i + 1]);
         const Point2D velocity(uVelocity[i], vVelocity[i]);
         const Point2D start = position - velocity * dt;
 
-        real uResult = 0, vResult = 0, minDistSq = std::numeric_limits<real>::infinity();
+        real uResult = 0, vResult = 0;
+        bool isPointInsideMesh = false;
         for(int j = 0; j < elementsCount; ++j) {
             grid.getElement(j, elementIndexes, reinterpret_cast<real*>(elementNodes));
             // Check if start lies inside an element. This uses the barrycentric coordinates to check if a point lies in a triangle.
@@ -1293,12 +1283,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
             // scaled by the determinant.
             const real scaledBarry1 =  (AP.x * AC.y - AP.y * AC.x) * DSign;
             if(scaledBarry1 < 0 || scaledBarry1 > D) {
-                updateClosestPoint(start, minDistSq, uResult, vResult);
                 continue;
             }
             const real scaledBarry2 = (AP.y * AB.x - AP.x * AB.y) * DSign;
             if(scaledBarry2 < 0 || scaledBarry1 > D - scaledBarry2) {
-                updateClosestPoint(start, minDistSq, uResult, vResult);
                 continue;
             }
             
@@ -1310,14 +1298,24 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
             
             real interpolationCoefficients[VelocityShape::size];
             VelocityShape::eval(xi, eta, interpolationCoefficients);
-            real uInterpolated = 0, vInterpolated = 0;
             for(int k = 0; k < VelocityShape::size; ++k) {
-                uInterpolated += interpolationCoefficients[k] * uVelocity[elementIndexes[k]];
-                vInterpolated += interpolationCoefficients[k] * vVelocity[elementIndexes[k]];
+                uResult += interpolationCoefficients[k] * uVelocity[elementIndexes[k]];
+                vResult += interpolationCoefficients[k] * vVelocity[elementIndexes[k]];
             }
-            uResult = uInterpolated;
-            vResult = vInterpolated;
+            isPointInsideMesh = true;
             break;
+        }
+        if(!isPointInsideMesh) {
+            real minDistSq = std::numeric_limits<real>::infinity();
+            for(int j = 0; j < velocityNodesCount; ++j) {
+                const Point2D meshPoint(velocityNodes[2 * j], velocityNodes[2 * j + 1]);
+                const real currentDistSq = start.distToSq(meshPoint);
+                if(currentDistSq < minDistSq) {
+                    minDistSq = currentDistSq;
+                    uResult = uVelocity[i];
+                    vResult = vVelocity[i];
+                }
+            }
         }
         uVelocityOut[i] = uResult;
         vVelocityOut[i] = vResult;

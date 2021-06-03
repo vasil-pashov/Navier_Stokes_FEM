@@ -22,10 +22,10 @@ void rungeEstimates(
     bool solve
 ) {
     baseFolder += method == FEM ? "FEM" : "SemiLagrangian";
-    const double dt[3] = {0.01, 0.001, 0.0001};
-    const double totalTime = 1;
-    const int totalTimeSteps = ceil((totalTime / dt[0]));
-    const int numNestedGrids = 3;
+    constexpr double dt[3] = {0.01, 0.001, 0.0001};
+    constexpr double totalTime = 1;
+    constexpr int totalTimeSteps = totalTime / dt[0];
+    constexpr int numNestedGrids = 3;
     std::string outPaths[numNestedGrids];
     for(int i = 0; i < numNestedGrids; ++i) {
         outPaths[i] = baseFolder + "_" + std::to_string(i);
@@ -91,9 +91,9 @@ int main(int nargs, char** cargs) {
     } else {
         NSFem::FemGrid2D grid;
         grid.loadJSON(cargs[1]);
-        NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(std::move(grid), 0.001, 0.001, cargs[2]);
-        // assembler.solve(1.f);
-        // assembler.semiLagrangianSolve(10.f);
+        NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(std::move(grid), 0.00001, 0.001, cargs[2]);
+        assembler.solve(0.001f);
+        // assembler.semiLagrangianSolve(0.02f);
     }
 
 }
