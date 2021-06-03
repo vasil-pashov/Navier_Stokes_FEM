@@ -5,6 +5,7 @@
 #include "static_matrix.h"
 #include <string>
 #include <nlohmann/json.hpp>
+#include <opencv2/imgproc.hpp>
 
 namespace NSFem {
 
@@ -16,6 +17,7 @@ namespace NSFem {
 /// @param[in] width The width of the resulting image in pixels
 /// @param[in] height The height of the resulting image in pixels
 void drawVectorPlot(
+    cv::Mat& outputImage,
     const FemGrid2D& grid,
     const SMM::real* const uVec,
     const SMM::real* const vVec,
@@ -323,6 +325,10 @@ private:
     /// Size of the time step used when approximating derivatives with respect to time
     real dt;
 
+    int outputImageWidth;
+    int outputImageHeight;
+    cv::Mat outputImage;
+
     template<int localRows, int localCols, typename TLocalF>
     void assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out);
 
@@ -556,14 +562,15 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         assert(false && "Failed to open file for writing the result");
     }
 
-    const std::string& velocityFieldPath = outFolder + "/velocity_field_" + std::to_string(timeStep) + ".jpeg";
+    const std::string& velocityFieldPath = outFolder + "/velocity_field_" + std::to_string(timeStep) + ".bmp";
     drawVectorPlot(
+        outputImage,
         grid,
         currentVelocitySolution,
         currentVelocitySolution + grid.getNodesCount(),
         velocityFieldPath.c_str(),
-        1920,
-        1080
+        outputImageWidth,
+        outputImageHeight
     );
     
 }
@@ -643,8 +650,13 @@ NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(
     grid(std::move(grid)),
     outFolder(outFolder),
     viscosity(viscosity),
-    dt(dt)
-{ }
+    dt(dt),
+    outputImageWidth(1920),
+    outputImageHeight(1080),
+    outputImage(outputImageHeight, outputImageWidth, CV_8UC3, cv::Scalar(255, 255, 255))
+{ 
+
+}
 
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float totalTime) {

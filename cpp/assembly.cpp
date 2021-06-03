@@ -74,6 +74,7 @@ static cv::Scalar heatmap(const real x, const real start, const real end) {
 }
 
 void drawVectorPlot(
+    cv::Mat& outputImage,
     const FemGrid2D& grid,
     const SMM::real* const uVec,
     const SMM::real* const vVec,
@@ -81,8 +82,8 @@ void drawVectorPlot(
     const int width,
     const int height
 ) {
-    cv::Mat mat(height, width, CV_8UC3, cv::Scalar(255, 255, 255));
 
+    outputImage.setTo(cv::Scalar(255, 255, 255));
     // First find the maximal length, it will be used to as an end interval during heatmap
     // interpolation. Then find the max and min coordinate in x and y directions, this is
     // used when drawing the image. We want to keep the aspect ratio when drawing the grid
@@ -146,7 +147,7 @@ void drawVectorPlot(
 
         // Draw the velocity
         cv::arrowedLine(
-            mat,
+            outputImage,
             cv::Point(xImageSpace, yImageSpace),
             cv::Point(xEndImageSpace, yEndImageSpace),
             heatmap(lengthScaled, 0, maxLength)
@@ -158,7 +159,7 @@ void drawVectorPlot(
             yOffset + nodes[2* i + 1] * yScale - minY * yScale
         );
         cv::circle(
-            mat,
+            outputImage,
             gridPointImageSpace,
             0,
             cv::Scalar(0, 0, 0),
@@ -169,9 +170,9 @@ void drawVectorPlot(
     // Info string with the maximal velocity, and maximal velocity component in each direction.
     const std::string& info = "Max velocity length: " + std::to_string(maxLength) + ". Max u: " + std::to_string(maxU) + ". Max v: " + std::to_string(maxV);
 
-    cv::putText(mat, info.c_str(), cv::Point(0, height), cv::FONT_HERSHEY_PLAIN, 1, cv::Scalar(0, 0, 0), 1);
+    cv::putText(outputImage, info.c_str(), cv::Point(0, height), cv::FONT_HERSHEY_PLAIN, 1, cv::Scalar(0, 0, 0), 1);
 
-    cv::imwrite(path.c_str(), mat);
+    cv::imwrite(path.c_str(), outputImage);
 }
 }
 
