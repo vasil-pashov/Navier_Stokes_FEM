@@ -706,12 +706,12 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
 
     SMM::CSRMatrix::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
     {
-        const int preconditionError = velocityMassIC0.init();
+        [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
     }
     SMM::CSRMatrix::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
     {
-        const int preconditionError = pressureStiffnessIC0.init();
+        [[maybe_unused]]const int preconditionError = pressureStiffnessIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
     }
 
@@ -873,9 +873,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
 
         exportSolution(timeStep);
     }
-
-    currentVelocitySolution.deinit();
-    currentPressureSolution.deinit();
 }
 
 template<typename VelocityShape, typename PressureShape>
@@ -938,12 +935,12 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
 
     SMM::CSRMatrix::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
     {
-        const int preconditionError = velocityMassIC0.init();
+        [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
     }
     SMM::CSRMatrix::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
     {
-        const int preconditionError = pressureStiffnessIC0.init();
+        [[maybe_unused]]const int preconditionError = pressureStiffnessIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
     }
 
@@ -1088,9 +1085,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
         exportSolution(timeStep);
 
     }
-
-    currentPressureSolution.deinit();
-    currentVelocitySolution.deinit();
 }
 
 template<typename VelocityShape, typename PressureShape>
