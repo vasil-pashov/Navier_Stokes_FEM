@@ -324,13 +324,12 @@ private:
 
     /// Size of the time step used when approximating derivatives with respect to time
     real dt;
-
     int outputImageWidth;
     int outputImageHeight;
     cv::Mat outputImage;
 
-    template<int localRows, int localCols, typename TLocalF>
-    void assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out);
+    template<int localRows, int localCols, typename TLocalF, typename Triplet>
+    void assembleMatrix(const TLocalF& localFunction, Triplet& triplet);
 
     /// Assemble global matrix which will be used to solve problem with Dirichlet conditions. Rows and colums of the
     /// out matrix with indexes matching a boundary nodes will be filled  with zero (except the diagonal elements).
@@ -367,14 +366,16 @@ private:
 
     /// Handles assembling of the velocity mass matrix. It precomputes the integrals of each pair
     /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
-    void assemblVelocityMassMatrix();
+    template<typename Triplet>
+    void assemblVelocityMassMatrix(Triplet& triplet);
 
     /// Handles assembling of the convection matrix. It does it directly by the formula and does not use
     /// precomputed integrals. In theory it's possible, but it would make the code too complicated as it
     /// would require combined integral of 3 basis functions (i,j,k forall i,j,k). The convection matrix
     /// depends on the solution at the current time step. It changes at each time step.
     /// @param[out] outConvectionMatrix The resulting convection matrix
-    void assembleConvectionMatrix(SMM::CSRMatrix& outConvectionMatrix);
+    template<typename Triplet>
+    void assembleConvectionMatrix(Triplet& triplet);
 
     /// This handles the assembling of the divergence matrix. This function looks a lot like assembleMatrix.
     /// In fact we could split the divergence matrix into two matrices (one for x direction and one for y direction)
@@ -403,6 +404,24 @@ private:
         real* const uVelocityOut,
         real* const vVelocityOut
     );
+
+    void compileVelocityPattern(SMM::ReusableTriplet& triplet) {
+        assert(grid.getElementSize() == VelocityShape::size);
+        static_assert(VelocityShape::size == 6);
+        const int numElements = grid.getElementsCount();
+        const int* elementsBuffer = grid.getElementsBuffer();
+        for(int i = 0; i < numElements; ++i) {
+            const int elIndex = i * VelocityShape::size;
+            for(int j = 0; j < VelocityShape::size; ++j) {
+                for(int k = 0; k < VelocityShape::size; ++k) {
+                    const int row = elementsBuffer[elIndex + j];
+                    const int col = elementsBuffer[elIndex + k];
+                    triplet.addEntry(row, col, 0);
+                }
+            }
+        }
+        triplet.compile();
+    }
 
     template<typename Shape>
     struct LocalStiffnessFunctor {
@@ -616,16 +635,14 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
 }
 
 template<typename VelocityShape, typename PressureShape>
-template<int localRows, int localCols, typename TLocalF>
-void NavierStokesAssembly<VelocityShape, PressureShape>::assembleMatrix(const TLocalF& localFunction, SMM::CSRMatrix& out) {
-    const int numNodes = grid.getNodesCount();
+template<int localRows, int localCols, typename TLocalF, typename Triplet>
+void NavierStokesAssembly<VelocityShape, PressureShape>::assembleMatrix(const TLocalF& localFunction, Triplet& triplet) {
     const int numElements = grid.getElementsCount();
     const int elementSize = std::max(VelocityShape::size, PressureShape::size);
     int elementIndexes[elementSize];
     real elementNodes[2 * elementSize];
     assert(elementSize == grid.getElementSize());
     StaticMatrix<real, localRows, localCols> localMatrix;
-    SMM::TripletMatrix triplet(numNodes, numNodes);
     for(int i = 0; i < numElements; ++i) {
         grid.getElement(i, elementIndexes, elementNodes);
         localFunction(elementIndexes, elementNodes, localMatrix);
@@ -637,7 +654,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleMatrix(const TL
             }
         }
     }
-    out.init(triplet);
 }
 
 template<typename VelocityShape, typename PressureShape>
@@ -661,11 +677,16 @@ NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float totalTime) {
     
-    assemblVelocityMassMatrix();
+    SMM::TripletMatrix triplet(grid.getNodesCount(), grid.getNodesCount());
+
+    assemblVelocityMassMatrix(triplet);
+    triplet.clear();
 
     // Assemble global velocity stiffness matrix
     LocalStiffnessFunctor<VelocityShape> localVelocityStiffness;
-    assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, velocityStiffnessMatrix);
+    assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, triplet);
+    velocityStiffnessMatrix.init(triplet);
+    triplet.clear();
 
     // Assemble global pressure stiffness matrix.
     const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
@@ -679,7 +700,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         const int* boundary = pressureDrichiletIt->getNodeIndexes();
         const int boundarySize = pressureDrichiletIt->getSize();
         allBoundaryNodes.insert(boundary, boundary + boundarySize);
-
     }
     
     SMM::TripletMatrix pressureDirichletWeightsTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
@@ -737,7 +757,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         // changes over time and must be reevaluated at each step.
         // TODO: Do not allocate space on each iteration, but reuse the matrix sparse structure
         SMM::CSRMatrix convectionMatrix;
-        assembleConvectionMatrix(convectionMatrix);
+        assembleConvectionMatrix(triplet);
+        convectionMatrix.init(triplet);
+        triplet.clear();
 
         // Find the tentative velocity. The system is:
         // velocityMassMatrix.tentative = 
@@ -1122,7 +1144,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::imposeVelocityDirichlet
 }
 
 template<typename VelocityShape, typename PressureShape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::assemblVelocityMassMatrix() {
+template<typename Triplet>
+void NavierStokesAssembly<VelocityShape, PressureShape>::assemblVelocityMassMatrix(Triplet& triplet) {
     // Compute the mass matrix. Local mass matrix is of the form Integral(dot(Transpose(PSI(xi, eta)), PSI(xi, eta)) * abs(|J|) dxi * deta). 
     // Where PSI(xi, eta) = {psi1(xi, eta), psi2(xi, eta), psi3(xi, eta), ...} is a row vector containing all shape functions and
     // |J| is the determinant of Jacobi matrix for the transformation to the unit triangle. Not that |J| is scalar which does not
@@ -1156,11 +1179,13 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assemblVelocityMassMatr
             }
         }
     };
-    assembleMatrix<VelocityShape::size, VelocityShape::size>(localMass, velocityMassMatrix);
+    assembleMatrix<VelocityShape::size, VelocityShape::size>(localMass, triplet);
+    velocityMassMatrix.init(triplet);
 }
 
 template<typename VelocityShape, typename PressureShape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::assembleConvectionMatrix(SMM::CSRMatrix& convectionMatrix) {
+template<typename Triplet>
+void NavierStokesAssembly<VelocityShape, PressureShape>::assembleConvectionMatrix(Triplet& triplet) {
     const int nodesCount = grid.getNodesCount();
 
     const auto localConvection = [&](
@@ -1201,7 +1226,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleConvectionMatri
         TriangleIntegrator::integrate(convectionIntegrant, localMatrixOut);
     };
 
-    assembleMatrix<VelocityShape::size , VelocityShape::size>(localConvection, convectionMatrix);
+    assembleMatrix<VelocityShape::size , VelocityShape::size>(localConvection, triplet);
 }
 
 template<typename VelocityShape, typename PressureShape>
