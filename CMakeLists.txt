@@ -15,7 +15,7 @@ set(
 )
 
 set(
-	WITH_PERF
+	WITH_CPU_PROFILER
 	OFF CACHE BOOL
 	"If ON additional compiler flags will be set so that the executable could be profiled with perf"
 )
@@ -46,6 +46,7 @@ set(CPP
 	cpp/expression.cpp
 	cpp/error_code.cpp
 	cpp/assembly.cpp
+	cpp/kd_tree.cpp
 )
 
 set(HEADERS
@@ -54,6 +55,7 @@ set(HEADERS
 	include/static_matrix.h
 	include/expression.h
 	include/error_code.h
+	include/kd_tree.h
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
@@ -75,6 +77,6 @@ if(${WITH_GBENCH})
 	target_link_libraries(${PROJECT_NAME} PRIVATE benchmark::benchmark)
 endif()
 
-if(${WITH_PERF})
-	target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer -g -shared-libgcc)
+if(${WITH_CPU_PROFILER})
+	target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer -g)
 endif()

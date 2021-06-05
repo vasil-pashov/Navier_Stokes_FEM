@@ -26,33 +26,6 @@ void drawVectorPlot(
     const int height
 );
 
-struct Point2D {
-    Point2D() : x(0), y(0) {}
-    Point2D(real x, real y) : x(x), y(y) {}
-    Point2D operator+(const Point2D& other) const {
-        return Point2D(x + other.x, y + other.y);
-    }
-    Point2D operator-(const Point2D& other) const {
-        return Point2D(x - other.x, y - other.y);
-    }
-    Point2D operator*(const real scalar) const {
-        return Point2D(x * scalar, y * scalar);
-    }
-    /// Find the squared distance to another 2D point
-    real distToSq(const Point2D& other) const {
-        return (x - other.x)*(x - other.x) + (y - other.y)*(y - other.y);
-    }
-    real x, y;
-};
-
-/// Check if a 2D point p lies inside the triangle formed by point A, B and C
-/// @param[in] P The point which is goint to be tested
-/// @param[in] A First vertex of the triangle
-/// @param[in] B Second vertex of the triangle
-/// @param[in] C Third vertex of the triangle
-/// @retval true if the point lies in the triangle, false othwerwise
-bool isPointInTriagle(const Point2D& p, const Point2D& A, const Point2D& B, const Point2D& C);
-
 using real = double;
 
 /// Find the determinant of the Jacobi matrix for a linear transformation of random triangle to the unit one
