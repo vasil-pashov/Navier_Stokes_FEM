@@ -70,7 +70,9 @@ public:
     const real* getNodesBuffer() const;
     /// Return index buffer for the elements of the mesh. Each integer here is index in the nodes array
     /// for the node.
-    const int* getElementsBuffer() const;
+    const int* getElementsBuffer() const {
+        return elements.data();
+    }
     /// Extract the i-th element and write it in outElement
     /// @param[in] elementIndex The index of the element to be extracted
     /// @param[out] outElement Array of size at least elementSize where node indices for the array will be extracted
