@@ -659,21 +659,19 @@ NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float totalTime) {
     
-    SMM::CSRMatrixCached convectionMatrix; 
+    SMM::CSRMatrix convectionMatrix; 
 
     SMM::TripletMatrix triplet(grid.getNodesCount(), grid.getNodesCount());
     assemblVelocityMassMatrix(triplet);
     velocityMassMatrix.init(triplet);
-    // The convection matrix shares the same nonzero pattern as the velocity mass matrix, we initialize
-    // it with the same triplet so that we can take the nonzero pattern.
-    convectionMatrix.init(triplet);
-    triplet.clear();
+    triplet.deinit();
 
     // Assemble global velocity stiffness matrix
     LocalStiffnessFunctor<VelocityShape> localVelocityStiffness;
+    triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
     assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, triplet);
     velocityStiffnessMatrix.init(triplet);
-    triplet.clear();
+    triplet.deinit();
 
     // Assemble global pressure stiffness matrix.
     const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
@@ -736,17 +734,11 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
 
     const real eps = 1e-8;
 
-
+    triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+    assembleConvectionMatrix(triplet);
+    convectionMatrix.init(triplet);
 
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
-        // Convection is the convection matrix formed by (dot(u_h, del(fi_i)), fi_j) : forall i, j in 0...numVelocityNodes - 1
-        // Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
-        // components of the velocity, thus we will assemble it only once and use the same matrix to compute all velocity components.
-        // Used to compute the tentative velocity at step i + 1/2. The matrix depends on the current solution for the velocity, thus it
-        // changes over time and must be reevaluated at each step.
-        // TODO: Do not allocate space on each iteration, but reuse the matrix sparse structure
-        convectionMatrix.clearValues();
-        assembleConvectionMatrix(convectionMatrix);
 
         // Find the tentative velocity. The system is:
         // velocityMassMatrix.tentative = 
@@ -887,6 +879,16 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         for(int i = 0; i < nodesCount; ++i) {
             currentVelocitySolution[i + nodesCount] += tmp[i];
         }
+
+        // This prepares the convection matrix for the next step
+        // Convection is the convection matrix formed by (dot(u_h, del(fi_i)), fi_j) : forall i, j in 0...numVelocityNodes - 1
+        // Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
+        // components of the velocity, thus we will assemble it only once and use the same matrix to compute all velocity components.
+        // Used to compute the tentative velocity at step i + 1/2. The matrix depends on the current solution for the velocity, thus it
+        // changes over time and must be reevaluated at each step.
+        // TODO: Do not allocate space on each iteration, but reuse the matrix sparse structure
+        convectionMatrix.zeroValues();
+        assembleConvectionMatrix(convectionMatrix);
 
         // Prepare the velocity rhs vector for the next iteration
         velocityRhs.fill(0);
