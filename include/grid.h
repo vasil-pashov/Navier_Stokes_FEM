@@ -9,6 +9,79 @@ namespace NSFem {
 
 using real = double;
 
+struct Point2D {
+    Point2D() : x(0), y(0) {}
+    Point2D(real x, real y) : x(x), y(y) {}
+    Point2D operator+(const Point2D& other) const {
+        return Point2D(x + other.x, y + other.y);
+    }
+    Point2D operator-(const Point2D& other) const {
+        return Point2D(x - other.x, y - other.y);
+    }
+    Point2D operator*(const real scalar) const {
+        return Point2D(x * scalar, y * scalar);
+    }
+    /// Find the squared distance to another 2D point
+    real distToSq(const Point2D& other) const {
+        return (x - other.x)*(x - other.x) + (y - other.y)*(y - other.y);
+    }
+    real operator[](const int idx) const {
+        assert(idx < 2);
+        return (&x)[idx];
+    }
+    real& operator[](const int idx) {
+        assert(idx < 2);
+        return (&x)[idx];
+    }
+    real x, y;
+};
+
+class BBox2D {
+public:
+    BBox2D() :
+        min(std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()),
+        max(-std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity())
+    {
+        static_assert(std::numeric_limits<float>::is_iec559, "IEEE 754 required");
+    }
+
+    BBox2D(const Point2D& min, const Point2D& max) : 
+        min(min), max(max)
+    {}
+
+    void reset() {
+        min.x = std::numeric_limits<float>::infinity();
+        min.y = std::numeric_limits<float>::infinity();
+        max.x = -std::numeric_limits<float>::infinity();
+        max.y = -std::numeric_limits<float>::infinity();
+    }
+
+    void expand(const Point2D& point) {
+        min.x = std::min(point.x, min.x);
+        min.y = std::min(point.y, min.y);
+
+        max.x = std::max(point.x, point.x);
+        max.y = std::max(point.y, point.y);
+    }
+
+    bool isInside(const Point2D& point) {
+        return (min.x <= point.x && point.x <= max.x) && (min.y <= point.y && point.y <= max.y);
+    }
+
+    const Point2D getMax() const {
+        return max;
+    }
+
+    const Point2D getMin() const {
+        return min;
+    }
+private:
+    Point2D min;
+    Point2D max;
+};
+
+
+
 /// Class to represent 2D FEM grid. It will host the coordinates of all nodes, all elements as index buffers into the nodes
 /// All boundary nodes, with the conditions which will be imposed on the nodes.
 class FemGrid2D {
@@ -73,6 +146,12 @@ public:
     const int* getElementsBuffer() const {
         return elements.data();
     }
+    const int* getElement(const int elementIndex) const {
+        return elements.data() + elementIndex * elementSize;
+    }
+    const Point2D& getNode(const int nodeIndex) const {
+        return *reinterpret_cast<const Point2D*>(nodes.data() + 2 * nodeIndex);
+    }
     /// Extract the i-th element and write it in outElement
     /// @param[in] elementIndex The index of the element to be extracted
     /// @param[out] outElement Array of size at least elementSize where node indices for the array will be extracted
@@ -95,6 +174,10 @@ public:
     int getPressureDirichletSize() const;
     /// Get iterator to all different boundaries where Dirichlet condition is imposed for the pressure
     PressureDirichletConstIt getPressureDirichlet() const;
+
+    const BBox2D& getBBox() const {
+        return bbox;
+    }
 protected:
     /// List containing 2D coordinates for each node in the grid.
     std::vector<real> nodes;
@@ -112,6 +195,8 @@ protected:
 
     std::vector<VelocityDirichlet> velocityDirichlet;
     std::vector<PressureDirichlet> pressureDirichlet;
+
+    BBox2D bbox;
 };
 
 inline int FemGrid2D::getVelocityDirichletSize() const {

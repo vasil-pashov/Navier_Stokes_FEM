@@ -7,6 +7,7 @@
 namespace NSFem {
 
 int FemGrid2D::loadJSON(const char* filePath) {
+    bbox.reset();
     std::ifstream jsonFile(filePath);
     auto data = nlohmann::json::parse(jsonFile, nullptr, false);
     if(data.is_discarded()) {
@@ -22,7 +23,10 @@ int FemGrid2D::loadJSON(const char* filePath) {
     nodes.reserve(velocityNodesCount * 2);
     for(int i = 0; i < velocityNodesCount; ++i) {
         assert(data["nodes"][i].size() == 2 && "Expected 2D grid. All nodes must be of (x, y) pairs of size 2");
-        nodes.insert(nodes.end(), data["nodes"][i].begin(), data["nodes"][i].end());
+        Point2D node(data["nodes"][i][0], data["nodes"][i][1]);
+        bbox.expand(node);
+        nodes.push_back(node.x);
+        nodes.push_back(node.y);
     }
     for(int i = 0; i < elementsCount; ++i) {
         assert(elementSize == static_cast<int>(data["elements"][i].size()) && "Mismatch between declared element size and actual element size");
