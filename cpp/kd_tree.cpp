@@ -1,6 +1,7 @@
 #include "kd_tree.h"
 #include <cmath>
 #include <vector>
+#include<numeric>
 
 namespace NSFem {
 
@@ -64,6 +65,9 @@ namespace NSFem {
         this->bbox = grid->getBBox();
         maxDepth = maxDepth > -1 ? maxDepth : std::log(grid->getElementsCount());
         assert(grid->getElementSize() == 6);
+        std::vector<int> indices(grid->getElementsCount());
+        std::iota(indices.begin(), indices.end(), 0);
+        build(indices, bbox, 0, 0);
     }
 
     int TriangleKDTree::build(
