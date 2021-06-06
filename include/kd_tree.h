@@ -24,8 +24,15 @@ bool isPointInTriagle(
 
 class TriangleKDTree {
 public:
+    /// @brief Default constrict the tree.
+    /// maxDepth will be log(meshTriangles), minLeafSize will be 16
     TriangleKDTree();
-    TriangleKDTree(int maxDepth, int maxLeafSize);
+    /// Constructor for a KDTree. Does not allocate memory, nor builds the tree.
+    /// Only sets the passed config parameters.
+    /// @param[in] maxDepth The maximal depth of the tree.
+    /// @param[in] minLeafSize The minimum elements in a leaf. If at any point durig the
+    /// construction of the tree any node has less or equal elements in it, it will be made a leaf
+    TriangleKDTree(int maxDepth, int minLeafSize);
     void init(FemGrid2D* grid);
     /// @brief Checks if a point lies inside any of the triangles in the grid.
     /// If so xi and eta will be set to the barrycentric coordinates of the point inside the triangle
@@ -124,7 +131,7 @@ private:
     FemGrid2D *grid;
     BBox2D bbox;
     int maxDepth;
-    int maxLeafSize;
+    int minLeafSize;
 };
 
 

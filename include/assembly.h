@@ -250,6 +250,7 @@ private:
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
 
+    /// KDTree which is used semi-Lagrangian solver is used.
     TriangleKDTree kdTree;
 
     /// Mass matrix for the velocity formed by (fi_i, fi_j) : forall i, j in 0...numVelocityNodes - 1
@@ -1258,6 +1259,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
         const Point2D velocity(uVelocity[i], vVelocity[i]);
         const Point2D start = position - velocity * dt;
 
+// #define BF_SEMI_LAGRANGIAN
+#ifdef BF_SEMI_LAGRANGIAN
         real uResult = 0, vResult = 0;
         bool isPointInsideMesh = false;
         for(int j = 0; j < elementsCount; ++j) {
@@ -1320,7 +1323,35 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
         }
         uVelocityOut[i] = uResult;
         vVelocityOut[i] = vResult;
+#else
+        // If start is inside some element xi and eta will be the barrycentric coordinates
+        // of start inside that element.
+        real xi, eta;
+        // If start does not lie in any triangle this will be the index of the nearest node to start
+        int nearestNeighbour;
+        const element = kdTree.findElement(start, xi, eta, nearestNeighbour);
+        if(element > -1) {
+            // Start point lies in an element, interpolate it by using the shape functions.
+            // This is possible because xi and eta do not change when the element is transformed
+            // to the unit element where the shape functions are defined. 
+            real uResult = 0, vResult = 0;
+            grid.getElement(element, elementIndexes, reinterpret_cast<real*>(elementNodes));
+            real interpolationCoefficients[VelocityShape::size];
+            VelocityShape::eval(xi, eta, interpolationCoefficients);
+            for(int k = 0; k < VelocityShape::size; ++k) {
+                uResult += interpolationCoefficients[k] * uVelocity[elementIndexes[k]];
+                vResult += interpolationCoefficients[k] * vVelocity[elementIndexes[k]];
+            }
+            uVelocityOut[i] = uResult;
+            vVelocityOut[i] = vResult;
+        } else {
+            // Start point does not lie in any element (probably it's outside the mesh)
+            // Use the closest point in the mesh to approximate the velocity
+            uVelocityOut[i] = uVelocity[nearestNeighbour];
+            vVelocityOut[i] = vVelocity[nearestNeighbour];
+        }
     }
+#endif
 }
 
 }

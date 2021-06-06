@@ -29,7 +29,7 @@ namespace NSFem {
         // |py - ay| = |By - Ay  Cy - Ay||l2|
         //
         // |l1| = 1/D * |Cy - Ay  Ax - Cx||px - ax|
-        // |l2| = 1/D * |Ay - Cy  Bx - Ax||py - ay|
+        // |l2| = 1/D * |Ay - By  Bx - Ax||py - ay|
         const Point2D AB = B - A;
         const Point2D AC = C - A;
         const Point2D AP = P - A;
@@ -46,19 +46,22 @@ namespace NSFem {
         if(scaledBarry2 < 0 || scaledBarry1 > D - scaledBarry2) {
             return false;
         }
-        const real dInv = 1 / D;
+            
+        // When we reach this point we know that the point "start" is inside the triangle
+        // We need to scale down the barrycentroc coords and we'll get the point inside the triangle
+        const real dInv = 1 / std::abs(D);
         xi = scaledBarry1 * dInv;
         eta = scaledBarry2 * dInv;
         return true;
     }
 
-    TriangleKDTree::TriangleKDTree(int maxDepth, int maxLeafSize) :
+    TriangleKDTree::TriangleKDTree(int maxDepth, int minLeafSize) :
         maxDepth(maxDepth),
-        maxLeafSize(maxLeafSize)
+        minLeafSize(minLeafSize)
     {}
     TriangleKDTree::TriangleKDTree() :
         maxDepth(-1),
-        maxLeafSize(16)
+        minLeafSize(16)
     {}
     void TriangleKDTree::init(FemGrid2D* grid) {
         this->grid = grid;
@@ -76,7 +79,7 @@ namespace NSFem {
     	int axis,
     	int level
     ) {
-    	if (level > maxDepth || indices.size() <= maxLeafSize) {
+    	if (level >= maxDepth || indices.size() <= minLeafSize) {
     		const int numTriangles = indices.size();
     		const int trianglesOffset = leafTriangleIndexes.size();
     		std::move(indices.begin(), indices.end(), std::back_inserter(leafTriangleIndexes));
@@ -103,9 +106,9 @@ namespace NSFem {
                 grid->getElementsBuffer()[6 * elementIndex + 1],
                 grid->getElementsBuffer()[6 * elementIndex + 2],
             };
-            const Point2D A(grid->getNodesBuffer()[nodeIndices[0]], grid->getNodesBuffer()[nodeIndices[0] + 1]);
-            const Point2D B(grid->getNodesBuffer()[nodeIndices[1]], grid->getNodesBuffer()[nodeIndices[1] + 1]);
-            const Point2D C(grid->getNodesBuffer()[nodeIndices[2]], grid->getNodesBuffer()[nodeIndices[2] + 1]);
+            const Point2D& A = grid->getNode(nodeIndices[0]);
+            const Point2D& B = grid->getNode(nodeIndices[1]);
+            const Point2D& C = grid->getNode(nodeIndices[2]);
 
     		if (A[axis] <= splitPoint || B[axis] <= splitPoint || C[axis] <= splitPoint) {
     			leftIndexes.push_back(elementIndex);
