@@ -874,11 +874,17 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(const float totalTime) {
     
-    assemblVelocityMassMatrix();
+    SMM::TripletMatrix triplet(grid.getNodesCount(), grid.getNodesCount());
+    assemblVelocityMassMatrix(triplet);
+    velocityMassMatrix.init(triplet);
+    triplet.deinit();
 
     // Assemble global velocity stiffness matrix
     LocalStiffnessFunctor<VelocityShape> localVelocityStiffness;
-    assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, velocityStiffnessMatrix);
+    triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+    assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, triplet);
+    velocityStiffnessMatrix.init(triplet);
+    triplet.deinit();
 
     // Assemble global pressure stiffness matrix.
     const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
@@ -1304,8 +1310,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
                 const real currentDistSq = start.distToSq(meshPoint);
                 if(currentDistSq < minDistSq) {
                     minDistSq = currentDistSq;
-                    uResult = uVelocity[i];
-                    vResult = vVelocity[i];
+                    uResult = uVelocity[j];
+                    vResult = vVelocity[j];
                 }
             }
         }

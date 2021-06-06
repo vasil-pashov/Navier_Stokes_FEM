@@ -91,9 +91,9 @@ int main(int nargs, char** cargs) {
     } else {
         NSFem::FemGrid2D grid;
         grid.loadJSON(cargs[1]);
-        NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(std::move(grid), 0.0001, 0.001, cargs[2]);
-        assembler.solve(0.01f);
-        // assembler.semiLagrangianSolve(0.02f);
+        NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(std::move(grid), 0.01, 0.001, cargs[2]);
+        //assembler.solve(10.0f);
+        assembler.semiLagrangianSolve(1.0f);
     }
 
 }
