@@ -32,9 +32,11 @@ public:
     /// @param[in] point 2D point in world space which will be tested against the tree
     /// @param[out] xi First barrycentric coordinate of the point inside the triangle
     /// @param[out] eta Second barrycentric coordinate of the point inside the triangle
+    /// @param[out] closestFEMNodeIndex If point does not lie inside any element, this will hold the index
+    /// of the closest point of the grid to the given one
     /// @retval -1 if the point does not lie inside a triangle, otherwise the index of the element where
     /// the point lies 
-    int findElement(const Point2D& point, real& xi, real& eta);
+    int findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex);
 private:
 	struct Node {
 	public:
@@ -90,6 +92,32 @@ private:
     int getRootIndex() const {
         return 0;
     }
+
+    /// Compare all of the points in the leaf and check if any of the points has distance to the
+    /// given point less than minDistSq. If so update minDistSq and the index of the femNode in the mesh
+    void nearestNeghbourProcessLeaf(const Point2D& point, const Node& node, real& minDistSq, int& closestFEMNodeIndex);
+
+    struct TraversalStackEntry {
+        TraversalStackEntry(int node, int count) :
+            node(node),
+            count(count)
+        {}
+        void descend() {
+            count++;
+        }
+        int getVisitCount() const {
+            return count;
+        }
+        bool isExhausted() const {
+            return count == 2;
+        }
+        int getNode() const {
+            return node;
+        }
+    private:
+        int node;
+        int count;
+    };
 
     std::vector<Node> nodes;
     std::vector<int> leafTriangleIndexes;
