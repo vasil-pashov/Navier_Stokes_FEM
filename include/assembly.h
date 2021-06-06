@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <grid.h>
 #include "static_matrix.h"
+#include "kd_tree.h"
 #include <string>
 #include <nlohmann/json.hpp>
 #include <opencv2/imgproc.hpp>
@@ -248,6 +249,8 @@ public:
 private:
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
+
+    TriangleKDTree kdTree;
 
     /// Mass matrix for the velocity formed by (fi_i, fi_j) : forall i, j in 0...numVelocityNodes - 1
     /// Where fi_i is the i-th velocity basis function. This matrix is the same for the u and v components of the velocity,
@@ -626,7 +629,7 @@ NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(
     outputImageHeight(1080),
     outputImage(outputImageHeight, outputImageWidth, CV_8UC3, cv::Scalar(255, 255, 255))
 { 
-
+    kdTree.init(&(this->grid));
 }
 
 template<typename VelocityShape, typename PressureShape>
