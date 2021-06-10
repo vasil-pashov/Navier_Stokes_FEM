@@ -692,15 +692,14 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
     velocityStiffnessMatrix.init(triplet);
     triplet.deinit();
 
-    // Assemble global pressure stiffness matrix.
-    const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
     // The key is the node index, the value is which boundary it belongs to
     // This is used during the assembling to check if a node belongs to a boundary
     // Since a node can belong to one and only one boundary we have vector of unordered
     // triplet matrices which will hold the weights
     std::unordered_set<int> allBoundaryNodes;
-    FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichlet();
-    for(int i = 0; i < numPressureDirichletBoundaries; ++i, ++pressureDrichiletIt) {
+    FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichletBegin();
+    const FemGrid2D::PressureDirichletConstIt pressureDrichiletEnd = grid.getPressureDirichletEnd();
+    for(; pressureDrichiletIt != pressureDrichiletEnd; ++pressureDrichiletIt) {
         const int* boundary = pressureDrichiletIt->getNodeIndexes();
         const int boundarySize = pressureDrichiletIt->getSize();
         allBoundaryNodes.insert(boundary, boundary + boundarySize);
@@ -826,8 +825,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
         velocityDivergenceMatrix.rMult(currentVelocitySolution, pressureRhs);
 
         // Now impose the Dirichlet Boundary Conditions
-        pressureDrichiletIt = grid.getPressureDirichlet();
-        for(int boundaryIndex = 0; boundaryIndex < numPressureDirichletBoundaries; ++boundaryIndex, ++pressureDrichiletIt) {
+        pressureDrichiletIt = grid.getPressureDirichletBegin();
+        for(; pressureDrichiletIt != pressureDrichiletEnd; ++pressureDrichiletIt) {
             const FemGrid2D::PressureDirichlet& boundary = *pressureDrichiletIt;
             for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
                 const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
@@ -922,11 +921,19 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
     
     SMM::TripletMatrix triplet(grid.getNodesCount(), grid.getNodesCount());
 
+    // ======================================================================
+    // ====================== ASSEMBLE VELOCITY MASS ========================
+    // ======================================================================
+
     LocalMassFunctor<VelocityShape> localVelocityMass;
     triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
     assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
     velocityMassMatrix.init(triplet);
     triplet.deinit();
+
+    // ======================================================================
+    // ==================== ASSEMBLE VELOCITY STIFFNESS =====================
+    // ======================================================================
 
     // Assemble global velocity stiffness matrix
     LocalStiffnessFunctor<VelocityShape> localVelocityStiffness;
@@ -935,36 +942,44 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
     velocityStiffnessMatrix.init(triplet);
     triplet.deinit();
 
-    // Assemble global pressure stiffness matrix.
-    const int numPressureDirichletBoundaries = grid.getPressureDirichletSize();
+    // ======================================================================
+    // ==================== ASSEMBLE PRESSURE STIFFNESS =====================
+    // ======================================================================
+
     // The key is the node index, the value is which boundary it belongs to
     // This is used during the assembling to check if a node belongs to a boundary
     // Since a node can belong to one and only one boundary we have vector of unordered
     // triplet matrices which will hold the weights
     std::unordered_set<int> allBoundaryNodes;
-    FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichlet();
-    for(int i = 0; i < numPressureDirichletBoundaries; ++i, ++pressureDrichiletIt) {
+    FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichletBegin();
+    const FemGrid2D::PressureDirichletConstIt pressureDrichiletEnd = grid.getPressureDirichletEnd();
+    for(; pressureDrichiletIt != pressureDrichiletEnd; ++pressureDrichiletIt) {
         const int* boundary = pressureDrichiletIt->getNodeIndexes();
         const int boundarySize = pressureDrichiletIt->getSize();
         allBoundaryNodes.insert(boundary, boundary + boundarySize);
-
     }
     
+    triplet.init(grid.getPressureNodesCount(), grid.getPressureNodesCount(), -1);
     SMM::TripletMatrix pressureDirichletWeightsTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
     LocalStiffnessFunctor<PressureShape> localPressureStuffness;
-    SMM::TripletMatrix pressureStiffnessTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
     assembleBCMatrix<PressureShape::size, PressureShape::size>(
         localPressureStuffness,
         allBoundaryNodes,
-        pressureStiffnessTriplet,
+        triplet,
         pressureDirichletWeightsTriplet
     );
-    pressureStiffnessMatrix.init(pressureStiffnessTriplet);
+    pressureStiffnessMatrix.init(triplet);
     SMM::CSRMatrix pressureDirichletWeights;
     pressureDirichletWeights.init(pressureDirichletWeightsTriplet);
-     
+    
+    // ======================================================================
+    // ==================== ASSEMBLE DIVERGENCE MATRICES ====================
+    // ======================================================================
+
     assembleDivergenceMatrix<PressureShape, VelocityShape, true>(velocityDivergenceMatrix);
     assembleDivergenceMatrix<VelocityShape, PressureShape, false>(pressureDivergenceMatrix);
+
+    // ====================================================================
 
     velocityStiffnessMatrix *= -(viscosity * dt);
     const real dtInv = real(1) / dt;
@@ -1021,8 +1036,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
         velocityDivergenceMatrix.rMult(tmp, pressureRhs);
 
         // Now impose the Dirichlet Boundary Conditions
-        pressureDrichiletIt = grid.getPressureDirichlet();
-        for(int boundaryIndex = 0; boundaryIndex < numPressureDirichletBoundaries; ++boundaryIndex, ++pressureDrichiletIt) {
+        pressureDrichiletIt = grid.getPressureDirichletBegin();
+        for(;pressureDrichiletIt != pressureDrichiletEnd; ++pressureDrichiletIt) {
             const FemGrid2D::PressureDirichlet& boundary = *pressureDrichiletIt;
             for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
                 const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
