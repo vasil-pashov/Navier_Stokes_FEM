@@ -1,4 +1,6 @@
 #pragma once
+// Make sparse_matrix_math library use double. Must be before the incude of sparse_matrix_math.h
+#define SMM_DEBUG_DOUBLE
 #include <sparse_matrix_math/sparse_matrix_math.h>
 #include <unordered_set>
 #include <grid.h>
@@ -341,11 +343,6 @@ private:
     template<typename Shape>
     void assembleStiffnessMatrix(SMM::CSRMatrix& out);
 
-    /// Handles assembling of the velocity mass matrix. It precomputes the integrals of each pair
-    /// shape function and then calls assembleMatrix with functor which takes advantage of this optimization
-    template<typename Triplet>
-    void assemblVelocityMassMatrix(Triplet& triplet);
-
     /// Handles assembling of the convection matrix. It does it directly by the formula and does not use
     /// precomputed integrals. In theory it's possible, but it would make the code too complicated as it
     /// would require combined integral of 3 basis functions (i,j,k forall i,j,k). The convection matrix
@@ -498,6 +495,48 @@ private:
         /// The first p2Size entries in each row are the first integral and the second represent the second integral 
         StaticMatrix<real, RegularShape::size, DelShape::delSize> combined;
     };
+
+    /// Handles assembling of the velocity mass matrix. It precomputes the integrals of each pair shape functions
+    template<typename Shape>
+    struct LocalMassFunctor {
+        LocalMassFunctor() {
+            const auto squareShape = [](
+                const real xi,
+                const real eta,
+                StaticMatrix<real, VelocityShape::size, VelocityShape::size>& out
+            ) -> void {
+                real p2Res[VelocityShape::size];
+                VelocityShape::eval(xi, eta, p2Res);
+                for(int i = 0; i < VelocityShape::size; ++i) {
+                    for(int j = 0; j < VelocityShape::size; ++j) {
+                        out[i][j] = p2Res[i]*p2Res[j];
+                    }
+                }
+            };
+            TriangleIntegrator::integrate(squareShape, shapeSquared);
+        }
+
+        void operator()(
+            [[maybe_unused]]const int* elementIndexes,
+            const real* elementNodes,
+            StaticMatrix<real, Shape::size, Shape::size>& localMatrixOut
+        ) const {
+            const real jDetAbs = std::abs(linTriangleTmJacobian(elementNodes));
+            for(int i = 0; i < VelocityShape::size; ++i) {
+                for(int j = 0; j < VelocityShape::size; ++j) {
+                    localMatrixOut[i][j] = shapeSquared[i][j] * jDetAbs;
+                }
+            }
+        }
+    private:
+        // Local mass matrix is of the form Integral(dot(Transpose(PSI(xi, eta)), PSI(xi, eta)) * abs(|J|) dxi * deta). 
+        // Where PSI(xi, eta) = {psi1(xi, eta), psi2(xi, eta), psi3(xi, eta), ...} is a row vector containing all shape functions and
+        // |J| is the determinant of Jacobi matrix for the transformation to the unit triangle. Not that |J| is scalar which does not
+        // depend of xi and eta, thus we can write the formula as |J| * integral(psi_i(xi, eta) * psi_j(xi, eta) * dxi * deta). So
+        // there is no need to integrate the shape funcions for each element. We shall precompute the integral and then for each element
+        // find |J| and multiply the precompute integral by it.
+        StaticMatrix<real, Shape::size, Shape::size> shapeSquared;
+    };
 };
 
 template<typename VelocityShape, typename PressureShape>
@@ -639,7 +678,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
     SMM::CSRMatrix convectionMatrix; 
 
     SMM::TripletMatrix triplet(grid.getNodesCount(), grid.getNodesCount());
-    assemblVelocityMassMatrix(triplet);
+
+    LocalMassFunctor<VelocityShape> localVelocityMass;
+    triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+    assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
     velocityMassMatrix.init(triplet);
     triplet.deinit();
 
@@ -879,7 +921,10 @@ template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(const float totalTime) {
     
     SMM::TripletMatrix triplet(grid.getNodesCount(), grid.getNodesCount());
-    assemblVelocityMassMatrix(triplet);
+
+    LocalMassFunctor<VelocityShape> localVelocityMass;
+    triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+    assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
     velocityMassMatrix.init(triplet);
     triplet.deinit();
 
@@ -1113,45 +1158,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::imposeVelocityDirichlet
             velocityVector[nodeIndex + nodesCount] = vBoundary;
         }
     }
-}
-
-template<typename VelocityShape, typename PressureShape>
-template<typename Triplet>
-void NavierStokesAssembly<VelocityShape, PressureShape>::assemblVelocityMassMatrix(Triplet& triplet) {
-    // Compute the mass matrix. Local mass matrix is of the form Integral(dot(Transpose(PSI(xi, eta)), PSI(xi, eta)) * abs(|J|) dxi * deta). 
-    // Where PSI(xi, eta) = {psi1(xi, eta), psi2(xi, eta), psi3(xi, eta), ...} is a row vector containing all shape functions and
-    // |J| is the determinant of Jacobi matrix for the transformation to the unit triangle. Not that |J| is scalar which does not
-    // depend of xi and eta, thus we can write the formula as |J| * integral(psi_i(xi, eta) * psi_j(xi, eta) * dxi * deta). So
-    // there is no need to integrate the shape funcions for each element. We shall precompute the integral and then for each element
-    // find |J| and multiply the precompute integral by it.
-
-    const auto squareShape = [](const real xi, const real eta, StaticMatrix<real, VelocityShape::size, VelocityShape::size> & out) -> void {
-        real p2Res[VelocityShape::size];
-        VelocityShape::eval(xi, eta, p2Res);
-        for(int i = 0; i < VelocityShape::size; ++i) {
-            for(int j = 0; j < VelocityShape::size; ++j) {
-                out[i][j] = p2Res[i]*p2Res[j];
-            }
-        }        
-    };
-    // This will hold the result of integral(psi_i(xi, eta) * psi_j(xi, eta) dxi * deta)
-    StaticMatrix<real, VelocityShape::size, VelocityShape::size> shapeSquared;
-    TriangleIntegrator::integrate(squareShape, shapeSquared);
-
-    // Lambda wich takes advantage of precomputed shape function integral
-    const auto localMass = [&](
-        [[maybe_unused]]const int* elementIndexes,
-        const real* elementNodes,
-        StaticMatrix<real, VelocityShape::size, VelocityShape::size>& localMatrixOut
-    ) -> void {
-        const real jDetAbs = std::abs(linTriangleTmJacobian(elementNodes));
-        for(int i = 0; i < VelocityShape::size; ++i) {
-            for(int j = 0; j < VelocityShape::size; ++j) {
-                localMatrixOut[i][j] = shapeSquared[i][j] * jDetAbs;
-            }
-        }
-    };
-    assembleMatrix<VelocityShape::size, VelocityShape::size>(localMass, triplet);
 }
 
 template<typename VelocityShape, typename PressureShape>
