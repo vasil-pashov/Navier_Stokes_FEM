@@ -1329,7 +1329,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
         real xi, eta;
         // If start does not lie in any triangle this will be the index of the nearest node to start
         int nearestNeighbour;
-        const element = kdTree.findElement(start, xi, eta, nearestNeighbour);
+        const int element = kdTree.findElement(start, xi, eta, nearestNeighbour);
         if(element > -1) {
             // Start point lies in an element, interpolate it by using the shape functions.
             // This is possible because xi and eta do not change when the element is transformed
