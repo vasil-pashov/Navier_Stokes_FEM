@@ -930,51 +930,98 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
     }
 }
 
+// #define IMPLICIT_DIFFUSION
+
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(const float totalTime) {
     
-    SMM::TripletMatrix triplet(grid.getNodesCount(), grid.getNodesCount());
-
+    SMM::TripletMatrix triplet;
+    SMM::TripletMatrix dirichletWeightsTriplet;
+    std::unordered_set<int> allBoundaryNodes;
+    
     // ======================================================================
     // ====================== ASSEMBLE VELOCITY MASS ========================
     // ======================================================================
 
-    LocalMassFunctor<VelocityShape> localVelocityMass;
     triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+    LocalMassFunctor<VelocityShape> localVelocityMass;
     assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
     velocityMassMatrix.init(triplet);
     triplet.deinit();
 
-    // ======================================================================
-    // ==================== ASSEMBLE VELOCITY STIFFNESS =====================
-    // ======================================================================
+    // =====================================================================
+    // =================== ASSEMBLE DIFFUSION MATRIX =======================
+    // =====================================================================
 
-    // Assemble global velocity stiffness matrix
     LocalStiffnessFunctor<VelocityShape> localVelocityStiffness;
+#ifdef IMPLICIT_DIFFUSION
+    const auto diffusionMatrixLocal = [&localVelocityMass, &localVelocityStiffness, this](
+        [[maybe_unused]]const int* elementIndexes,
+        const real* elementNodes,
+        StaticMatrix<real, VelocityShape::size, VelocityShape::size>& localMatrixOut
+    ) {
+        localVelocityMass(elementIndexes, elementNodes, localMatrixOut);
+
+        StaticMatrix<real, VelocityShape::size, VelocityShape::size> stiffness;
+        localVelocityStiffness(elementIndexes, elementNodes, stiffness);
+
+        localMatrixOut += stiffness * dt * viscosity;
+    };
+
+    collectBoundaryNodes(grid.getVelocityDirichletBegin(), grid.getVelocityDirichletEnd(), allBoundaryNodes);
+    triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+    dirichletWeightsTriplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+    SMM::CSRMatrix diffusionMatrix;
+    assembleBCMatrix<VelocityShape::size, VelocityShape::size>(
+        diffusionMatrixLocal,
+        allBoundaryNodes,
+        triplet,
+        dirichletWeightsTriplet
+    );
+    diffusionMatrix.init(triplet);
+
+    SMM::CSRMatrix velocityDirichletWeights;
+    velocityDirichletWeights.init(dirichletWeightsTriplet);
+
+    triplet.deinit();
+    dirichletWeightsTriplet.deinit();
+    allBoundaryNodes.clear();
+
+    SMM::CSRMatrix::IC0Preconditioner diffusionIC0(diffusionMatrix);
+    {
+        [[maybe_unused]]const int preconditionError = diffusionIC0.init();
+        assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
+    }
+#else
     triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
     assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, triplet);
     velocityStiffnessMatrix.init(triplet);
     triplet.deinit();
-
+    velocityMassMatrix *= -dt * viscosity;
+#endif
     // ======================================================================
     // ==================== ASSEMBLE PRESSURE STIFFNESS =====================
     // ======================================================================
 
-    std::unordered_set<int> allBoundaryNodes;
     collectBoundaryNodes(grid.getPressureDirichletBegin(), grid.getPressureDirichletEnd(), allBoundaryNodes);  
     triplet.init(grid.getPressureNodesCount(), grid.getPressureNodesCount(), -1);
-    SMM::TripletMatrix pressureDirichletWeightsTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
+    dirichletWeightsTriplet.init(grid.getPressureNodesCount(), grid.getPressureNodesCount(), -1);
     LocalStiffnessFunctor<PressureShape> localPressureStuffness;
     assembleBCMatrix<PressureShape::size, PressureShape::size>(
         localPressureStuffness,
         allBoundaryNodes,
         triplet,
-        pressureDirichletWeightsTriplet
+        dirichletWeightsTriplet
     );
     pressureStiffnessMatrix.init(triplet);
+
     SMM::CSRMatrix pressureDirichletWeights;
-    pressureDirichletWeights.init(pressureDirichletWeightsTriplet);
-    
+    pressureDirichletWeights.init(dirichletWeightsTriplet);
+
+    triplet.deinit();
+    dirichletWeightsTriplet.deinit();
+    allBoundaryNodes.clear();
+
     // ======================================================================
     // ==================== ASSEMBLE DIVERGENCE MATRICES ====================
     // ======================================================================
@@ -984,7 +1031,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
 
     // ====================================================================
 
-    velocityStiffnessMatrix *= -(viscosity * dt);
     const real dtInv = real(1) / dt;
     velocityDivergenceMatrix *= -dtInv;
     pressureDivergenceMatrix *= -dt;
@@ -999,6 +1045,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
     SMM::Vector tmp(nodesCount * 2, 0);
 
     std::unordered_map<char, float> pressureVars;
+    std::unordered_map<char, float> velocityVars;
 
     exportSolution(0);
 
@@ -1007,6 +1054,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
         [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
     }
+
     SMM::CSRMatrix::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
     {
         [[maybe_unused]]const int preconditionError = pressureStiffnessIC0.init();
@@ -1115,10 +1163,60 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
 // ==================================================================================
 // ============================= DIFFUSION SOLVE ====================================
 // ==================================================================================
-        velocityStiffnessMatrix.rMult(currentVelocitySolution, velocityRhs);
+#ifdef IMPLICIT_DIFFUSION
+        velocityMassMatrix.rMult(currentVelocitySolution, velocityRhs);
+
+        // Now impose the Dirichlet Boundary Conditions
+        FemGrid2D::VelocityDirichletConstIt velocityDrichiletIt = grid.getVelocityDirichletBegin();
+        const FemGrid2D::VelocityDirichletConstIt velocityDrichiletEnd = grid.getVelocityDirichletEnd();
+        for(;velocityDrichiletIt != velocityDrichiletEnd; ++velocityDrichiletIt) {
+            const FemGrid2D::VelocityDirichlet& boundary = *velocityDrichiletIt;
+            for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+                const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+                const real x = grid.getNodesBuffer()[nodeIndex * 2];
+                const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+                velocityVars['x'] = x;
+                velocityVars['y'] = y;
+                float uBoundary = 0, vBoundary = 0;
+                boundary.eval(&velocityVars, uBoundary, vBoundary);
+                velocityRhs[nodeIndex] = uBoundary;
+                velocityRhs[nodeIndex + nodesCount] = vBoundary;
+                SMM::CSRMatrix::ConstRowIterator it = velocityDirichletWeights.rowBegin(nodeIndex);
+                const SMM::CSRMatrix::ConstRowIterator end = velocityDirichletWeights.rowEnd(nodeIndex);
+                while(it != end) {
+                    velocityRhs[it->getCol()] -= it->getValue() * uBoundary;
+                    velocityRhs[it->getCol() + nodesCount] -= it->getValue() * vBoundary;;
+                    ++it;
+                }
+            }
+        }
 
         solveStatus = SMM::ConjugateGradient(
-            velocityMassMatrix,
+            diffusionMatrix,
+            velocityRhs,
+            currentVelocitySolution,
+            currentVelocitySolution,
+            -1,
+            eps,
+            diffusionIC0
+        );
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+
+        solveStatus = SMM::ConjugateGradient(
+            diffusionMatrix,
+            velocityRhs + nodesCount,
+            currentVelocitySolution + nodesCount,
+            currentVelocitySolution + nodesCount,
+            -1,
+            eps,
+            diffusionIC0
+        );
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+#else
+        velocityRhs.fill(0);
+        velocityStiffnessMatrix.rMult(currentVelocitySolution, velocityRhs);
+        solveStatus = SMM::ConjugateGradient(
+            velocityStiffnessMatrix,
             velocityRhs,
             currentVelocitySolution,
             tmp,
@@ -1131,8 +1229,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
             currentVelocitySolution[i] += tmp[i];
         }
 
+        velocityStiffnessMatrix.rMult(currentVelocitySolution, velocityRhs);
         solveStatus = SMM::ConjugateGradient(
-            velocityMassMatrix,
+            velocityStiffnessMatrix,
             velocityRhs + nodesCount,
             currentVelocitySolution + nodesCount,
             tmp + nodesCount,
@@ -1140,18 +1239,13 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
             eps,
             velocityMassIC0
         );
-
+        assert(solveStatus == SMM::SolverStatus::SUCCESS);
         for(int i = 0; i < nodesCount; ++i) {
             currentVelocitySolution[i + nodesCount] += tmp[i + nodesCount];
         }
 
         imposeVelocityDirichlet(currentVelocitySolution);
-
-
-        // Prepare the velocity rhs vector for the next iteration
-        // velocityRhs.fill(0);
-        // There is no need to fill the pressure rhs as the matrix vector product does not need it to be 0
-
+#endif
         exportSolution(timeStep);
 
     }
@@ -1161,7 +1255,7 @@ template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::imposeVelocityDirichlet(SMM::Vector& velocityVector) {
     const int nodesCount = grid.getNodesCount();
     const int velocityDirichletCount = grid.getVelocityDirichletSize();
-    FemGrid2D::VelocityDirichletConstIt velocityDirichletBoundaries = grid.getVelocityDirichlet();
+    FemGrid2D::VelocityDirichletConstIt velocityDirichletBoundaries = grid.getVelocityDirichletBegin();
     for(int boundaryIndex = 0; boundaryIndex < velocityDirichletCount; ++boundaryIndex) {
         const FemGrid2D::VelocityDirichlet& boundary = velocityDirichletBoundaries[boundaryIndex];
         std::unordered_map<char, float> variables;

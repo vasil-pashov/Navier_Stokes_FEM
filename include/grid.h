@@ -163,11 +163,12 @@ public:
     /// @returns Status code: 0 on success
     int loadJSON(const char* filePath);
 
-    using VelocityDirichletConstIt = const VelocityDirichlet*;
+    using VelocityDirichletConstIt = std::vector<VelocityDirichlet>::const_iterator;
     /// Get the number of different boundaries where Dirichlet condition is imposed for the velocity
     int getVelocityDirichletSize() const;
     /// Get iterator to all different boundaries where Dirichlet condition is imposed for the velocity
-    VelocityDirichletConstIt getVelocityDirichlet() const;
+    VelocityDirichletConstIt getVelocityDirichletBegin() const;
+    VelocityDirichletConstIt getVelocityDirichletEnd() const;
 
     using PressureDirichletConstIt = std::vector<PressureDirichlet>::const_iterator;
     /// Get the number of different boundaries where Dirichlet condition is imposed for the pressure
@@ -205,8 +206,12 @@ inline int FemGrid2D::getVelocityDirichletSize() const {
     return velocityDirichlet.size();
 }
 
-inline FemGrid2D::VelocityDirichletConstIt FemGrid2D::getVelocityDirichlet() const {
-    return velocityDirichlet.data();
+inline FemGrid2D::VelocityDirichletConstIt FemGrid2D::getVelocityDirichletBegin() const {
+    return velocityDirichlet.begin();
+}
+
+inline FemGrid2D::VelocityDirichletConstIt FemGrid2D::getVelocityDirichletEnd() const {
+    return velocityDirichlet.end();
 }
 
 inline int FemGrid2D::getPressureDirichletSize() const {

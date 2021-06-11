@@ -88,18 +88,20 @@ public:
         StaticMatrix<T, rows, cols> result;
         for (int i = 0; i < rows; ++i) {
             for (int j = 0; j < cols; ++j) {
-                result.element(i, j) = element(i, j) + rhs.data[i][j];
+                result.element(i, j) = element(i, j) + rhs.element(i, j);
             }
         }
+        return result;
     }
 
     constexpr const StaticMatrix<T, rows, cols> operator-(const StaticMatrix<T, rows, cols>& rhs) const {
         StaticMatrix<T, rows, cols> result;
         for (int i = 0; i < rows; ++i) {
             for (int j = 0; j < cols; ++j) {
-                result.element(i, j) = element(i, j) - rhs.data[i][j];
+                result.element(i, j) = element(i, j) - rhs.element(i, j);
             }
         }
+        return result;
     }
 
     constexpr void operator +=(const StaticMatrix<T, rows, cols>& other) {
