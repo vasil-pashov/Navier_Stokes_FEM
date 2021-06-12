@@ -578,7 +578,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::setOutputDir(std::strin
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const int timeStep) {
     const int nodesCount = grid.getNodesCount();
-     nlohmann::json outJSON = {
+    /*nlohmann::json outJSON = {
         {"u", nlohmann::json::array()},
         {"v", nlohmann::json::array()},
         {"timeStep", timeStep}
@@ -597,7 +597,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         outFile  << std::setw(4) << outJSON << std::endl;
     } else {
         assert(false && "Failed to open file for writing the result");
-    }
+    }*/
 
     const std::string& velocityFieldPath = outFolder + "/velocity_field_" + std::to_string(timeStep) + ".bmp";
     drawVectorPlot(
@@ -685,8 +685,8 @@ NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(
     outFolder(outFolder),
     viscosity(viscosity),
     dt(dt),
-    outputImageWidth(1920),
-    outputImageHeight(1080),
+    outputImageWidth(1366),
+    outputImageHeight(768),
     outputImage(outputImageHeight, outputImageWidth, CV_8UC3, cv::Scalar(255, 255, 255))
 { 
     kdTree.init(&(this->grid));
@@ -930,7 +930,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
     }
 }
 
-// #define IMPLICIT_DIFFUSION
+#define IMPLICIT_DIFFUSION
 
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(const float totalTime) {
@@ -938,6 +938,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
     SMM::TripletMatrix triplet;
     SMM::TripletMatrix dirichletWeightsTriplet;
     std::unordered_set<int> allBoundaryNodes;
+    
     
     // ======================================================================
     // ====================== ASSEMBLE VELOCITY MASS ========================
@@ -997,7 +998,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
     assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityStiffness, triplet);
     velocityStiffnessMatrix.init(triplet);
     triplet.deinit();
-    velocityMassMatrix *= -dt * viscosity;
+    velocityStiffnessMatrix *= -dt * viscosity;
 #endif
     // ======================================================================
     // ==================== ASSEMBLE PRESSURE STIFFNESS =====================
@@ -1165,6 +1166,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
 // ==================================================================================
 #ifdef IMPLICIT_DIFFUSION
         velocityMassMatrix.rMult(currentVelocitySolution, velocityRhs);
+        velocityMassMatrix.rMult(currentVelocitySolution + nodesCount, velocityRhs + nodesCount);
 
         // Now impose the Dirichlet Boundary Conditions
         FemGrid2D::VelocityDirichletConstIt velocityDrichiletIt = grid.getVelocityDirichletBegin();
@@ -1213,10 +1215,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 #else
-        velocityRhs.fill(0);
         velocityStiffnessMatrix.rMult(currentVelocitySolution, velocityRhs);
+
         solveStatus = SMM::ConjugateGradient(
-            velocityStiffnessMatrix,
+            velocityMassMatrix,
             velocityRhs,
             currentVelocitySolution,
             tmp,
@@ -1229,9 +1231,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(con
             currentVelocitySolution[i] += tmp[i];
         }
 
-        velocityStiffnessMatrix.rMult(currentVelocitySolution, velocityRhs);
+        velocityStiffnessMatrix.rMult(currentVelocitySolution + nodesCount, velocityRhs + nodesCount);
         solveStatus = SMM::ConjugateGradient(
-            velocityStiffnessMatrix,
+            velocityMassMatrix,
             velocityRhs + nodesCount,
             currentVelocitySolution + nodesCount,
             tmp + nodesCount,
