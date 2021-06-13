@@ -25,6 +25,9 @@ static cv::Scalar heatmap(const real x, const real start, const real end) {
         color(255, 0, 0) // red
     };
     const real h = (end - start) / (numColors - 1);
+    if(std::abs(h) < 1e-4) {
+        return colors[0];
+    }
     cv::Scalar result(0, 0 ,0);
     // Lagrangian interpolation
     for(int i = 0; i < numColors; ++i) {
@@ -46,6 +49,7 @@ void drawVectorPlot(
     const FemGrid2D& grid,
     const SMM::real* const uVec,
     const SMM::real* const vVec,
+    const SMM::real* const pressure,
     const std::string& path,
     const int width,
     const int height
@@ -91,6 +95,11 @@ void drawVectorPlot(
     const real yOffset = 0.5 * std::max(real(0), height - yScale * yWidth);
     const real xOffset = 0.5 * std::max(real(0), width - xScale * xWidth);
 
+    real maxPressure = -std::numeric_limits<float>::infinity();
+    for(int i = 0; i < grid.getPressureNodesCount(); ++i) {
+        maxPressure = std::max(pressure[i], maxPressure);
+    }
+
     const real maxLength = std::sqrt(maxLenSq);
     real maxU = 0;
     real maxV = 0;
@@ -126,13 +135,62 @@ void drawVectorPlot(
             xOffset + nodes[2 * i] * xScale - xScale * minX,
             yOffset + nodes[2* i + 1] * yScale - minY * yScale
         );
-        cv::circle(
-            outputImage,
-            gridPointImageSpace,
-            0,
-            cv::Scalar(0, 0, 0),
-            2
-        );
+        if(i < grid.getPressureNodesCount()) {
+            cv::circle(
+                outputImage,
+                gridPointImageSpace,
+                1,
+                heatmap(pressure[i], 0, maxPressure),
+                2
+            );
+        } else {
+            cv::circle(
+                outputImage,
+                gridPointImageSpace,
+                0,
+                cv::Scalar(0, 0, 0),
+                2
+            );
+        }
+
+    }
+
+    for(int i = 0; i < grid.getElementsCount(); ++i) {
+        int idx[6];
+        Point2D nds[6];
+        grid.getElement(i, idx, reinterpret_cast<real*>(nds));
+        real nMinX = std::min(nds[2].x, std::min(nds[0].x, nds[1].x));
+        real nMaxX = std::max(nds[2].x, std::max(nds[0].x, nds[1].x));
+        real nMinY = std::min(nds[2].y, std::min(nds[0].y, nds[1].y));
+        real nMaxY = std::max(nds[2].y, std::max(nds[0].y, nds[1].y));
+
+
+        const real xImageSpace = nMinX * xScale + xScale * minX;
+        const real yImageSpace = nMinY * yScale + yScale * minY;
+
+        const real xEndImageSpace = nMaxX * xScale + xScale * minX;
+        const real yEndImageSpace = nMaxY * yScale + yScale * minY;
+
+        for(int row = xImageSpace; row < xEndImageSpace; ++row) {
+            for(int col = yImageSpace; col < yEndImageSpace; ++col) {
+                const real wx = (row + xScale * minX) / xScale;
+                const real wy = (col + yScale * minY) / yScale;
+                real xi, eta;
+                if(isPointInTriagle(Point2D(wx, wy), nds[0], nds[1], nds[2], xi, eta)) {
+                    real coeffs[3];
+                    P1::eval(xi, eta, coeffs);
+                    real val = coeffs[0] * pressure[idx[0]] + coeffs[1] * pressure[idx[1]] + coeffs[2] * pressure[idx[2]];
+                    auto color = heatmap(val, 0, maxPressure);
+                    cv::circle(
+                        outputImage,
+                        cv::Point(row, col),
+                        1,
+                        color,
+                        2
+                    );
+                }
+            }
+        }
     }
 
     // Info string with the maximal velocity, and maximal velocity component in each direction.

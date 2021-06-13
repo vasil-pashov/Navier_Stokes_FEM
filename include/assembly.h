@@ -16,6 +16,7 @@ namespace NSFem {
 /// @param[in] grid The grid where the simulation was done
 /// @param[in] uVec The velocity in u direction. Ordered the same way as the nodes in the grid are.
 /// @param[in] vVec The velocity in v direction. Ordered the same way as the nodes in the grid are.
+/// @param[in] pressure The pressure which will be plotted. Ordered the same way as the nodes in the grid are.
 /// @param[in] path Path where the image must be saved. (Will not create missing folders on the path)
 /// @param[in] width The width of the resulting image in pixels
 /// @param[in] height The height of the resulting image in pixels
@@ -24,6 +25,7 @@ void drawVectorPlot(
     const FemGrid2D& grid,
     const SMM::real* const uVec,
     const SMM::real* const vVec,
+    const SMM::real* const pressure,
     const std::string& path,
     const int width,
     const int height
@@ -605,6 +607,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         grid,
         currentVelocitySolution,
         currentVelocitySolution + grid.getNodesCount(),
+        currentPressureSolution,
         velocityFieldPath.c_str(),
         outputImageWidth,
         outputImageHeight

@@ -126,7 +126,7 @@ namespace NSFem {
     	return build(rightIndexes, rightBoundingBox, newAxis, level + 1);
     }
 
-    int TriangleKDTree::findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) {
+    int TriangleKDTree::findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
         int currentNodeIndex = getRootIndex();
         Node currentNode = nodes[currentNodeIndex];
         std::vector<TraversalStackEntry> traversalStack;
@@ -235,7 +235,7 @@ namespace NSFem {
         const Node& currentNode,
         real& minDistSq,
         int& closestFEMNodeIndex
-    ) {
+    ) const {
         Point2D femNodes[6];
         int femIndices[6];
         const int elementOffset = currentNode.getTriangleOffset();

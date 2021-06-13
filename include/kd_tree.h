@@ -43,7 +43,7 @@ public:
     /// of the closest point of the grid to the given one
     /// @retval -1 if the point does not lie inside a triangle, otherwise the index of the element where
     /// the point lies 
-    int findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex);
+    int findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const;
 private:
 	struct Node {
 	public:
@@ -102,7 +102,7 @@ private:
 
     /// Compare all of the points in the leaf and check if any of the points has distance to the
     /// given point less than minDistSq. If so update minDistSq and the index of the femNode in the mesh
-    void nearestNeghbourProcessLeaf(const Point2D& point, const Node& node, real& minDistSq, int& closestFEMNodeIndex);
+    void nearestNeghbourProcessLeaf(const Point2D& point, const Node& node, real& minDistSq, int& closestFEMNodeIndex) const;
 
     struct TraversalStackEntry {
         TraversalStackEntry(int node, int count) :
