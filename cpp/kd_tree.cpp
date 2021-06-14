@@ -66,7 +66,8 @@ namespace NSFem {
     void TriangleKDTree::init(FemGrid2D* grid) {
         this->grid = grid;
         this->bbox = grid->getBBox();
-        maxDepth = maxDepth > -1 ? maxDepth : std::log(grid->getElementsCount());
+        // The formula for depth is taken from pbrt
+        maxDepth = maxDepth > -1 ? maxDepth : std::round(8 + 1.3f * std::log(grid->getElementsCount()));
         assert(grid->getElementSize() == 6);
         std::vector<int> indices(grid->getElementsCount());
         std::iota(indices.begin(), indices.end(), 0);

@@ -77,22 +77,18 @@ void rungeEstimates(
         convergenceOrder[i] = std::log10(std::abs(normVV2 / normV2V3));
         std::cout<<"Convergence: "<<convergenceOrder[i]<<" error: "<<std::pow(10, convergenceOrder[i]) * normVV2 / (std::pow(10, convergenceOrder[i])-1)<<"\n";
     }
-
-
 }
 
 int main(int nargs, char** cargs) {
     if(nargs == 1) {
-        printf("Missing path to a FEM grid.");
         return 1;
     } else if(nargs == 2) {
-        printf("Missing output folder path.");
-        return 1;
-    } else {
-        NSFem::FemGrid2D grid;
-        grid.loadJSON(cargs[1]);
-        NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(std::move(grid), 0.01, 0.001, cargs[2]);
-        assembler.semiLagrangianSolve(5.f);
+        NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
+        EC::ErrorCode error = assembler.init(cargs[1]);
+        if(error.hasError()) {
+            printf("[Error] %s\n", error.getMessage().c_str());
+        }
+        assembler.semiLagrangianSolve();
     }
 
 }

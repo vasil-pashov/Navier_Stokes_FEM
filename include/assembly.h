@@ -4,6 +4,7 @@
 #include <sparse_matrix_math/sparse_matrix_math.h>
 #include <unordered_set>
 #include <grid.h>
+#include "error_code.h"
 #include "static_matrix.h"
 #include "kd_tree.h"
 #include <string>
@@ -264,9 +265,10 @@ private:
 template<typename VelocityShape, typename PressureShape>
 class NavierStokesAssembly {
 public:
-    NavierStokesAssembly(FemGrid2D&& grid, const real dt, const real viscosity, const std::string& outFolder);
-    void solve(const float totalTime);
-    void semiLagrangianSolve(const float totalTime);
+    NavierStokesAssembly();
+    EC::ErrorCode init(const char* simDescriptionPath);
+    void solve();
+    void semiLagrangianSolve();
     void setTimeStep(const real dt);
     void setOutputDir(std::string outputDir);
     void setOutputDir(std::string&& outputDir);
@@ -325,8 +327,18 @@ private:
 
     /// Size of the time step used when approximating derivatives with respect to time
     real dt;
+
+    /// The total time over the simulation is going to be executed
+    real totalTime;
+
+    /// The width of the output image in pixels
     int outputImageWidth;
+
+    /// The height of the output image in pixels
     int outputImageHeight;
+
+    /// OpenCV matrix which will is used when exporting image results. It will be filled with
+    /// the corresponding colors and then written to an image file on the hard disk inside the output folder.
     cv::Mat outputImage;
 
     template<int localRows, int localCols, typename TLocalF, typename Triplet>
@@ -562,6 +574,43 @@ private:
 };
 
 template<typename VelocityShape, typename PressureShape>
+EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(const char* simDescriptionPath) {
+    std::fstream simDescriptionFile(simDescriptionPath);
+    if(!simDescriptionFile.is_open()) {
+        return EC::ErrorCode(1, "Could not find desciption file");
+    }
+    nlohmann::basic_json simJson;
+    simDescriptionFile >> simJson;
+    if(!simJson["mesh_path"].is_string() ||
+        grid.loadJSON(simJson["mesh_path"].get_ptr<std::string*>()->c_str())
+    ) {
+        return EC::ErrorCode(2, "Could not load mesh");
+    }
+    if(simJson.contains("dt") && simJson["dt"].is_number()) {
+        dt = simJson["dt"];
+    } else {
+        return EC::ErrorCode(3, "Missing required param: dt");
+    }
+    if(simJson.contains("viscosity") && simJson["viscosity"].is_number()) {
+        viscosity = simJson["viscosity"];
+    } else {
+        return EC::ErrorCode(3, "Missing required param: viscosity");
+    }
+    if(simJson.contains("total_time") && simJson["total_time"].is_number()) {
+        totalTime = simJson["total_time"];
+    } else {
+        return EC::ErrorCode(3, "Missing required param: total_time");
+    }
+    if(simJson.contains("output_folder") && simJson["output_folder"].is_string()) {
+        outFolder = simJson["output_folder"];
+    }
+
+    kdTree.init(&grid);
+    return EC::ErrorCode();
+
+}
+
+template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::setTimeStep(const real dt) {
     this->dt = dt;
 }
@@ -579,6 +628,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::setOutputDir(std::strin
 
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const int timeStep) {
+    if(outFolder.empty()) {
+        return;
+    }
     const int nodesCount = grid.getNodesCount();
     /*nlohmann::json outJSON = {
         {"u", nlohmann::json::array()},
@@ -678,25 +730,19 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleMatrix(const TL
 }
 
 template<typename VelocityShape, typename PressureShape>
-NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(
-    FemGrid2D&& grid,
-    const real dt,
-    const real viscosity,
-    const std::string& outFolder
-) :
-    grid(std::move(grid)),
-    outFolder(outFolder),
-    viscosity(viscosity),
-    dt(dt),
+NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly() :
     outputImageWidth(1366),
     outputImageHeight(768),
     outputImage(outputImageHeight, outputImageWidth, CV_8UC3, cv::Scalar(255, 255, 255))
-{ 
-    kdTree.init(&(this->grid));
+{
+    if(this->outFolder.empty()) {
+        printf("[Warning] No output path is added. Graphics and solutions will not be saved.\n");
+    }
+    
 }
 
 template<typename VelocityShape, typename PressureShape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float totalTime) {
+void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
     
     SMM::CSRMatrix convectionMatrix; 
 
@@ -936,8 +982,20 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve(const float total
 #define IMPLICIT_DIFFUSION
 
 template<typename VelocityShape, typename PressureShape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve(const float totalTime) {
+void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     
+    printf("Begin solution using semi Lagrangian method\n");
+    printf("Elements: %d\n", grid.getElementsCount());
+    printf("Velocity nodes: %d\n", grid.getNodesCount());
+    printf("Pressure nodes: %d\n", grid.getPressureNodesCount());
+    printf("Total time: %f\n", totalTime);
+    printf("dt: %f\n", dt);
+    if(outFolder.empty()) {
+        printf("[Warning] No output folder. Results of the solver will not be written to disk\n");
+    } else {
+        printf("Output folder: %s\n", outFolder.c_str());
+    }
+
     SMM::TripletMatrix triplet;
     SMM::TripletMatrix dirichletWeightsTriplet;
     std::unordered_set<int> allBoundaryNodes;
