@@ -20,6 +20,12 @@ set(
 	"If ON additional compiler flags will be set so that the executable could be profiled with perf"
 )
 
+set(
+	WITH_PROFILIG_SCOPED_TIMERS
+	OFF CACHE BOOL
+	"If ON all scoped timers will be enabled and will print their result on the console"
+)
+
 if(${WITH_ADDRESS_SANITIZER})
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		set(_sanitizer_flags "-g -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -O0")
@@ -56,6 +62,7 @@ set(HEADERS
 	include/expression.h
 	include/error_code.h
 	include/kd_tree.h
+	include/timer.h
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
@@ -79,4 +86,8 @@ endif()
 
 if(${WITH_CPU_PROFILER})
 	target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer -g)
+endif()
+
+if(${WITH_PROFILIG_SCOPED_TIMERS})
+	target_compile_definitions(${PROJECT_NAME} PRIVATE WITH_PROFILIG_SCOPED_TIMERS)
 endif()

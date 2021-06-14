@@ -10,6 +10,7 @@
 #include <string>
 #include <nlohmann/json.hpp>
 #include <opencv2/imgproc.hpp>
+#include "timer.h"
 
 namespace NSFem {
 
@@ -735,10 +736,7 @@ NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly() :
     outputImageHeight(768),
     outputImage(outputImageHeight, outputImageWidth, CV_8UC3, cv::Scalar(255, 255, 255))
 {
-    if(this->outFolder.empty()) {
-        printf("[Warning] No output path is added. Graphics and solutions will not be saved.\n");
-    }
-    
+
 }
 
 template<typename VelocityShape, typename PressureShape>
@@ -984,17 +982,21 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     
+    const int steps = totalTime / dt;
     printf("Begin solution using semi Lagrangian method\n");
     printf("Elements: %d\n", grid.getElementsCount());
     printf("Velocity nodes: %d\n", grid.getNodesCount());
     printf("Pressure nodes: %d\n", grid.getPressureNodesCount());
     printf("Total time: %f\n", totalTime);
     printf("dt: %f\n", dt);
+    printf("Total steps: %d\n", steps);
     if(outFolder.empty()) {
         printf("[Warning] No output folder. Results of the solver will not be written to disk\n");
     } else {
         printf("Output folder: %s\n", outFolder.c_str());
     }
+
+    PROFILIG_SCOPED_TIMER_FUN()
 
     SMM::TripletMatrix triplet;
     SMM::TripletMatrix dirichletWeightsTriplet;
@@ -1097,7 +1099,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     velocityDivergenceMatrix *= -dtInv;
     pressureDivergenceMatrix *= -dt;
 
-    const int steps = totalTime / dt;
     const int nodesCount = grid.getNodesCount();
     currentVelocitySolution.init(nodesCount * 2, 0.0f);
     currentPressureSolution.init(grid.getPressureNodesCount(), real(0));
