@@ -99,13 +99,13 @@ int main(int nargs, char** cargs) {
         );
         EC::ErrorCode error = argParse.parse(nargs, cargs);
         if(error.hasError()) {
-            printf("[Error] %s\n", error.getMessage());
+            fprintf(stderr, "[Error] %s\n", error.getMessage());
             return 1;
         }
         NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
         error = assembler.init(argParse.getStringVal("sceneFile"));
         if(error.hasError()) {
-            printf("[Error] %s\n", error.getMessage());
+            fprintf(stderr, "[Error] %s\n", error.getMessage());
             return 1;
         }
         assembler.semiLagrangianSolve();
