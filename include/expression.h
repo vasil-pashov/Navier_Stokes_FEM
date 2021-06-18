@@ -5,7 +5,7 @@
 #include <unordered_map>
 
 namespace EC {
-	struct ErrorCode;
+	class ErrorCode;
 }
 
 namespace NSFem {

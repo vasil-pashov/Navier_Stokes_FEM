@@ -14,13 +14,13 @@
 	} while(false);
 
 namespace EC {
-	struct ErrorCode {
+	class ErrorCode {
 	public:
 		ErrorCode();
 		ErrorCode(const char*, ...);
 		ErrorCode(int status, const char*, ...);
 		int getStatus() const;
-		std::string getMessage() const;
+		const char* getMessage() const;
 		bool hasError() const;
 		operator bool() const {
 			return hasError();
@@ -35,8 +35,8 @@ namespace EC {
 		return status;
 	}
 
-	inline std::string ErrorCode::getMessage() const {
-		return message;
+	inline const char* ErrorCode::getMessage() const {
+		return message.c_str();
 	}
 
 	inline bool ErrorCode::hasError() const {

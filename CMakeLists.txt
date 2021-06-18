@@ -53,6 +53,7 @@ set(CPP
 	cpp/error_code.cpp
 	cpp/assembly.cpp
 	cpp/kd_tree.cpp
+	cpp/cmd_line_parser.cpp
 )
 
 set(HEADERS
@@ -63,6 +64,7 @@ set(HEADERS
 	include/error_code.h
 	include/kd_tree.h
 	include/timer.h
+	include/cmd_line_parser.h
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})

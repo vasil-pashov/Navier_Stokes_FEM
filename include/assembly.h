@@ -633,7 +633,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         return;
     }
     const int nodesCount = grid.getNodesCount();
-    /*nlohmann::json outJSON = {
+    nlohmann::json outJSON = {
         {"u", nlohmann::json::array()},
         {"v", nlohmann::json::array()},
         {"timeStep", timeStep}
@@ -652,7 +652,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         outFile  << std::setw(4) << outJSON << std::endl;
     } else {
         assert(false && "Failed to open file for writing the result");
-    }*/
+    }
 
     const std::string& velocityFieldPath = outFolder + "/velocity_field_" + std::to_string(timeStep) + ".bmp";
     drawVectorPlot(
@@ -1386,8 +1386,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
 ) {
     const int velocityNodesCount = grid.getNodesCount();
     const real* velocityNodes = grid.getNodesBuffer();
-    const int elementsCount = grid.getElementsCount();
-
+    
     static_assert(VelocityShape::size == 6, "Only P2-P1 elements are supported");
     assert(grid.getElementSize() == VelocityShape::size && "Only P2-P1 elements are supported");
     Point2D elementNodes[VelocityShape::size];
@@ -1400,6 +1399,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
 
 // #define BF_SEMI_LAGRANGIAN
 #ifdef BF_SEMI_LAGRANGIAN
+        const int elementsCount = grid.getElementsCount();
         real uResult = 0, vResult = 0;
         bool isPointInsideMesh = false;
         for(int j = 0; j < elementsCount; ++j) {
