@@ -22,6 +22,8 @@ namespace NSFem {
 /// @param[in] path Path where the image must be saved. (Will not create missing folders on the path)
 /// @param[in] width The width of the resulting image in pixels
 /// @param[in] height The height of the resulting image in pixels
+/// @param[in] maxArrowLength The max length of the arrows in the produced vector plot. The largest velocity will have
+/// this length and all others will be scaled accordingly
 void drawVectorPlot(
     cv::Mat& outputImage,
     const FemGrid2D& grid,
@@ -30,9 +32,12 @@ void drawVectorPlot(
     const SMM::real* const pressure,
     const std::string& path,
     const int width,
-    const int height
+    const int height,
+    const float maxArrowLength
 );
 
+/// Find the smapplest triangle side all of all triangles. Used to scale the vector plot points.
+float findSmallestSide(const FemGrid2D& grid);
 
 /// Find all nodes which are part a boundary. The boundary has imposed condition for one channel (velocity, pressure, etc.)
 /// @tparam IteratorT The type of the iterator which iterates over all boundaries for the given channel
@@ -342,6 +347,10 @@ private:
     /// the corresponding colors and then written to an image file on the hard disk inside the output folder.
     cv::Mat outputImage;
 
+    /// Used only when printing plots is enabled. This is the minimal length of all triangle sides of all elements
+    /// Vector length will be scaled according to this.
+    float minSideLen;
+
     template<int localRows, int localCols, typename TLocalF, typename Triplet>
     void assembleMatrix(const TLocalF& localFunction, Triplet& triplet);
 
@@ -604,6 +613,9 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(const cha
     }
     if(simJson.contains("output_folder") && simJson["output_folder"].is_string()) {
         outFolder = simJson["output_folder"];
+        minSideLen = findSmallestSide(grid);
+    } else {
+        minSideLen = 0;
     }
 
     kdTree.init(&grid);
@@ -663,7 +675,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         currentPressureSolution,
         velocityFieldPath.c_str(),
         outputImageWidth,
-        outputImageHeight
+        outputImageHeight,
+        minSideLen
     );
     
 }

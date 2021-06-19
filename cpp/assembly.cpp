@@ -44,6 +44,22 @@ static cv::Scalar heatmap(const real x, const real start, const real end) {
     return result;
 }
 
+float findSmallestSide(const FemGrid2D& grid) {
+    const int numElements = grid.getElementsCount();
+    assert(grid.getElementSize() == 6);
+    int idx[6];
+    Point2D nodes[6];
+    float res = std::numeric_limits<float>::infinity();
+    for(int i = 0; i < numElements; ++i) {
+        grid.getElement(i, idx, reinterpret_cast<NSFem::real*>(nodes));
+        const float minSide = std::min(
+            std::min(nodes[0].distToSq(nodes[1]), nodes[0].distToSq(nodes[2])),
+            nodes[1].distToSq(nodes[2]));
+        res = std::min(res, minSide);
+    }
+    return sqrt(res);
+}
+
 void drawVectorPlot(
     cv::Mat& outputImage,
     const FemGrid2D& grid,
@@ -52,7 +68,8 @@ void drawVectorPlot(
     const SMM::real* const pressure,
     const std::string& path,
     const int width,
-    const int height
+    const int height,
+    const float maxArrowLength
 ) {
 
     outputImage.setTo(cv::Scalar(255, 255, 255));
@@ -107,7 +124,7 @@ void drawVectorPlot(
         real maxU = uVec[0];
         real maxV = vVec[0];
         const real length = sqrt(uVec[i] * uVec[i] + vVec[i] * vVec[i]);
-        const real lengthScaled = length;
+        const real lengthScaled = length * (maxArrowLength / maxLength);
         const real x = nodes[2 * i];
         const real y = nodes[2 * i + 1];
         const real xEnd = x + lengthScaled * uVec[i];
@@ -127,7 +144,7 @@ void drawVectorPlot(
             outputImage,
             cv::Point(xImageSpace, yImageSpace),
             cv::Point(xEndImageSpace, yEndImageSpace),
-            heatmap(lengthScaled, 0, maxLength)
+            heatmap(lengthScaled, 0, maxArrowLength)
         );
 
         // Draw each grid point
@@ -135,24 +152,13 @@ void drawVectorPlot(
             xOffset + nodes[2 * i] * xScale - xScale * minX,
             yOffset + nodes[2* i + 1] * yScale - minY * yScale
         );
-        if(i < grid.getPressureNodesCount()) {
-            cv::circle(
-                outputImage,
-                gridPointImageSpace,
-                1,
-                heatmap(pressure[i], 0, maxPressure),
-                2
-            );
-        } else {
-            cv::circle(
-                outputImage,
-                gridPointImageSpace,
-                0,
-                cv::Scalar(0, 0, 0),
-                2
-            );
-        }
-
+        cv::circle(
+            outputImage,
+            gridPointImageSpace,
+            0,
+            cv::Scalar(0, 0, 0),
+            2
+        );
     }
 
     for(int i = 0; i < grid.getElementsCount(); ++i) {
