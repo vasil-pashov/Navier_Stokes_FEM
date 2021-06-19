@@ -139,12 +139,14 @@ void drawVectorPlot(
         maxU = std::max(maxU, (real)uVec[i]);
         maxV = std::max(maxV, (real)vVec[i]);
 
+        const cv::Scalar velocityHeat = heatmap(lengthScaled, 0, maxArrowLength);
+
         // Draw the velocity
         cv::arrowedLine(
             outputImage,
             cv::Point(xImageSpace, yImageSpace),
             cv::Point(xEndImageSpace, yEndImageSpace),
-            heatmap(lengthScaled, 0, maxArrowLength)
+            velocityHeat
         );
 
         // Draw each grid point
@@ -156,7 +158,7 @@ void drawVectorPlot(
             outputImage,
             gridPointImageSpace,
             0,
-            cv::Scalar(0, 0, 0),
+            velocityHeat,
             2
         );
     }

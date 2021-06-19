@@ -2,6 +2,7 @@
 #include "error_code.h"
 #include <cstring>
 #include <cassert>
+#include <cstdio>
 
 namespace CMD {
 
@@ -167,9 +168,9 @@ void CommandLineArgs::freeMem() {
 	paramInfo.clear();
 }
 
-void CommandLineArgs::print() {
+void CommandLineArgs::print(FILE* f) {
 	for (auto& it : paramInfo) {
-		printf("%s - %s\n", it.first.c_str(), it.second.description.c_str());
+		fprintf(f, "%s - %s\n", it.first.c_str(), it.second.description.c_str());
 	}
 }
 

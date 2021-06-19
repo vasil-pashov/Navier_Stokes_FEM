@@ -41,7 +41,8 @@ struct CommandLineArgs {
 	/// @retval true if the parameter was parsed, false otherwise
 	bool isSet(const char* name) const;
 	/// Show the parameters with their description
-	void print();
+	/// @param[in,out] f File stream where parameters will be printed
+	void print(FILE* f);
 	/// Delete all parameters as well as all parameter info
 	void freeMem();
 	/// Delete only the parameters, without deleting the info

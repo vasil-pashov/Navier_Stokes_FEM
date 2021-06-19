@@ -81,35 +81,39 @@ void rungeEstimates(
 }
 
 int main(int nargs, char** cargs) {
-    if(nargs == 1) {
-        return 1;
-    } else if(nargs == 2) {
-        CMD::CommandLineArgs argParse;
-        argParse.addParam(
-            "sceneFile",
-            "Path to the file describing the simulation",
-            CMD::CommandLineArgs::Type::String,
-            true
-        );
-        argParse.addParam(
-            "numThreads",
-            "The number of threads which the simulator should use. All threads by default.",
-            CMD::CommandLineArgs::Type::Int,
-            false
-        );
-        EC::ErrorCode error = argParse.parse(nargs, cargs);
-        if(error.hasError()) {
-            fprintf(stderr, "[Error] %s\n", error.getMessage());
-            return 1;
-        }
-        NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
-        error = assembler.init(argParse.getStringVal("sceneFile"));
-        if(error.hasError()) {
-            fprintf(stderr, "[Error] %s\n", error.getMessage());
-            return 1;
-        }
-        assembler.semiLagrangianSolve();
+    CMD::CommandLineArgs argParse;
+    argParse.addParam(
+        "sceneFile",
+        "Path to the file describing the simulation",
+        CMD::CommandLineArgs::Type::String,
+        true
+    );
+    argParse.addParam(
+        "numThreads",
+        "The number of threads which the simulator should use. All threads by default.",
+        CMD::CommandLineArgs::Type::Int,
+        false
+    );
+
+    if(nargs == 2 && strcmp(cargs[1], "-help") == 0) {
+        argParse.print(stdout);
         return 0;
     }
+
+    EC::ErrorCode error = argParse.parse(nargs, cargs);
+    if(error.hasError()) {
+        fprintf(stderr, "[Error] %s\n", error.getMessage());
+        fprintf(stderr, "Supported options\n");
+        argParse.print(stderr);
+        return 1;
+    }
+    NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
+    error = assembler.init(argParse.getStringVal("sceneFile"));
+    if(error.hasError()) {
+        fprintf(stderr, "[Error] %s\n", error.getMessage());
+        return 1;
+    }
+    assembler.semiLagrangianSolve();
+    return 0;
 
 }
