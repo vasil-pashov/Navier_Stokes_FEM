@@ -1,7 +1,8 @@
 #include "kd_tree.h"
 #include <cmath>
 #include <vector>
-#include<numeric>
+#include <numeric>
+#include <iterator>
 
 namespace NSFem {
 
