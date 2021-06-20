@@ -65,6 +65,7 @@ set(HEADERS
 	include/kd_tree.h
 	include/timer.h
 	include/cmd_line_parser.h
+	include/small_vector.h
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
