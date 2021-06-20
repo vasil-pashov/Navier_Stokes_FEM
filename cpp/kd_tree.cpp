@@ -1,11 +1,11 @@
 #include "kd_tree.h"
+#include "small_vector.h"
 #include <cmath>
 #include <vector>
 #include <numeric>
 #include <iterator>
 
 namespace NSFem {
-
     template<typename T>
     static inline T square(T a) {
         return a * a;
@@ -57,7 +57,7 @@ namespace NSFem {
     }
 
     TriangleKDTree::TriangleKDTree(int maxDepth, int minLeafSize) :
-        maxDepth(maxDepth),
+        maxDepth(std::min(maxDepth, 64)),
         minLeafSize(minLeafSize)
     {}
     TriangleKDTree::TriangleKDTree() :
@@ -68,7 +68,7 @@ namespace NSFem {
         this->grid = grid;
         this->bbox = grid->getBBox();
         // The formula for depth is taken from pbrt
-        maxDepth = maxDepth > -1 ? maxDepth : std::round(8 + 1.3f * std::log(grid->getElementsCount()));
+        maxDepth = maxDepth > -1 ? maxDepth : std::min(64, (int)std::round(8 + 1.3f * std::log(grid->getElementsCount())));
         assert(grid->getElementSize() == 6);
         std::vector<int> indices(grid->getElementsCount());
         std::iota(indices.begin(), indices.end(), 0);
@@ -131,8 +131,7 @@ namespace NSFem {
     int TriangleKDTree::findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
         int currentNodeIndex = getRootIndex();
         Node currentNode = nodes[currentNodeIndex];
-        std::vector<TraversalStackEntry> traversalStack;
-        traversalStack.reserve(maxDepth);
+        SmallVector<TraversalStackEntry, 64> traversalStack;
         // Search the element which contains the given point (if there is such). Not that unlike
         // nearest neighbour (or raytracing) we should descend only to the nearest side of the splitting plane
         // and there is no need to descend to the "far" child
@@ -141,11 +140,11 @@ namespace NSFem {
             const real splitPoint = currentNode.getSplitPoint();
             const int childIndex = (point[axis] <= splitPoint) * (currentNodeIndex + 1) +
                 (point[axis] > splitPoint) * currentNode.getRightChildIndex();
-            traversalStack.emplace_back(currentNodeIndex, 1);
+            traversalStack.emplaceBack(currentNodeIndex, 1);
             currentNodeIndex = childIndex;
             currentNode = nodes[currentNodeIndex];
         }
-        traversalStack.emplace_back(currentNodeIndex, 0);
+        traversalStack.emplaceBack(currentNodeIndex, 0);
         assert(currentNode.isLeaf());
         const int elementOffset = currentNode.getTriangleOffset();
         for(int i = 0; i < currentNode.getNumTrianges(); ++i) {
@@ -174,12 +173,12 @@ namespace NSFem {
             if(currentNode.isLeaf()) {
                 // When we are at a leaf we will examine all points in the leaf and compare the minimal distance
                 nearestNeghbourProcessLeaf(point, currentNode, minDistSq, closestFEMNodeIndex);
-                traversalStack.pop_back();
+                traversalStack.popBack();
             } else {
                 // We can descend from each node exactly two times, so we need to cleare the stack
                 // of all nodes which had both their children visited
                 while(!traversalStack.empty() && traversalStack.back().isExhausted()) {
-                    traversalStack.pop_back();
+                    traversalStack.popBack();
                 }
                 if(traversalStack.empty()) {
                     // This means that the root was popped in the while loop on the previous step
@@ -204,7 +203,7 @@ namespace NSFem {
                     traversalStack.back().descend();
 
                     // Add the new child to the stack. When children are added we assume that they were not used by now
-                    traversalStack.emplace_back(nextIndex, 0);
+                    traversalStack.emplaceBack(nextIndex, 0);
                 } else if(traversalStack.back().getVisitCount() == 1) {
                     // If the current node has one of its children traversed we need to check if the other must
                     // be traversed too. We need to traverse "the far" child if the distance between the splitting
@@ -218,11 +217,11 @@ namespace NSFem {
                             (point[axis] > splitPoint) * (activeNodeIndex + 1);
                         traversalStack.back().descend();
                         assert(traversalStack.back().isExhausted());
-                        traversalStack.emplace_back(farChildIndex, 0);
+                        traversalStack.emplaceBack(farChildIndex, 0);
                     } else {
                         // This distance to the splitting plane is greater than the minimal distance found, no need to
                         // traverse the other side. Just pop the current node.
-                        traversalStack.pop_back();
+                        traversalStack.popBack();
                     }
                 } else {
                     assert(false);

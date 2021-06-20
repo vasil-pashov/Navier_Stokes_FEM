@@ -105,6 +105,7 @@ private:
     void nearestNeghbourProcessLeaf(const Point2D& point, const Node& node, real& minDistSq, int& closestFEMNodeIndex) const;
 
     struct TraversalStackEntry {
+        TraversalStackEntry() : node(0), count(0) {}
         TraversalStackEntry(int node, int count) :
             node(node),
             count(count)
@@ -123,6 +124,9 @@ private:
         }
     private:
         int node;
+        /// Count how many times this node was visited. Since this is a binary tree the node
+        /// can be visited at most twice: frist when we go down the left child and second time
+        /// when we go down the right child.
         int count;
     };
 
