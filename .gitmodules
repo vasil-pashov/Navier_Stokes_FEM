@@ -1,0 +1,3 @@
+[submodule "sparse_matrix_math"]
+	path = sparse_matrix_math
+	url = https://github.com/vasil-pashov/sparse_matrix_math.git
