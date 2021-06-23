@@ -16,6 +16,7 @@ def parseOutput(otput, allFunctionTimes):
     pattern = re.compile("\[Scoped Timer\]\[(.*)\] ([-+]?\d*\.\d+|\d+)s")
     allMatches = re.findall(pattern, otput)
     for (fn, time) in allMatches:
+        print("{}: {}".format(fn, time))
         allFunctionTimes[fn].append(float(time))
 
 def processTimings(allFunctionTimes, totalRuns):
@@ -42,6 +43,7 @@ def main():
     for i in range(0, args.runs):
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
+            print("Run {} completed".format(i))
             parseOutput(result.stdout, allFunctionTimes)
         except subprocess.CalledProcessError as ex:
             print("Error: {} occured while trying to run running {}".format(result.stderr, command))
