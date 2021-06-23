@@ -21,7 +21,7 @@ set(
 )
 
 set(
-	WITH_PROFILIG_SCOPED_TIMERS
+	WITH_PROFILING_SCOPED_TIMERS
 	OFF CACHE BOOL
 	"If ON all scoped timers will be enabled and will print their result on the console"
 )
@@ -92,8 +92,43 @@ if(${WITH_CPU_PROFILER})
 	target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer -g)
 endif()
 
-if(${WITH_PROFILIG_SCOPED_TIMERS})
-	target_compile_definitions(${PROJECT_NAME} PRIVATE WITH_PROFILIG_SCOPED_TIMERS)
+if(${WITH_PROFILING_SCOPED_TIMERS})
+	target_compile_definitions(${PROJECT_NAME} PRIVATE WITH_PROFILING_SCOPED_TIMERS)
 endif()
 
 add_subdirectory(sparse_matrix_math)
+
+target_precompile_headers(${PROJECT_NAME}
+	PRIVATE
+		# containers
+		<vector>
+		<map>
+		<unordered_set>
+		<unordered_map>
+		<string>
+		<set>
+		# i/o
+		<fstream>
+		<cstdio>
+		<iostream>
+		<filesystem>
+		<iomanip>
+		# utils
+		<cstring>
+		<memory>
+		<cinttypes>
+		<chrono>
+		<limits>
+		<cassert>
+		<cstdarg>
+		<cctype>
+		<cmath>
+		<numeric>
+		<iterator>
+		<utility>
+		<algorithm>
+		# non STL
+		<nlohmann/json.hpp>
+		<opencv2/imgproc.hpp>
+		<opencv2/imgcodecs.hpp>
+)

@@ -54,17 +54,17 @@ namespace Profiling {
         #define TIMER_FUNCTION_NAME __PRETTY_FUNCTION__
     #endif
 
-    #define _PROFILIG_COMBINE_NAME_HELPER(A, B) A##B
-    #define _PROFILIG_COMBINE_NAME(A, B) _PROFILIG_COMBINE_NAME_HELPER(A, B) 
+    #define _PROFILING_COMBINE_NAME_HELPER(A, B) A##B
+    #define _PROFILING_COMBINE_NAME(A, B) _PROFILING_COMBINE_NAME_HELPER(A, B) 
 
-#ifdef WITH_PROFILIG_SCOPED_TIMERS
-    #define PROFILIG_SCOPED_TIMER_FUN() Profiling::ScopedTimer _PROFILIG_COMBINE_NAME(__scopedTimer, __LINE__)(TIMER_FUNCTION_NAME);
+#ifdef WITH_PROFILING_SCOPED_TIMERS
+    #define PROFILING_SCOPED_TIMER_FUN() Profiling::ScopedTimer _PROFILING_COMBINE_NAME(__scopedTimer, __LINE__)(TIMER_FUNCTION_NAME);
     // concatiname with empty string literal to assure that ARG is string literal
-    #define _PROFILIG_SCOPED_TIMER_CUSTOM_HELPER(ARG) ARG ""
-    #define PROFILIG_SCOPED_TIMER_CUSTOM(ARG) Profiling::ScopedTimer _PROFILIG_COMBINE_NAME(__scopedTimer, __LINE__)(PROFILIG_SCOPED_TIMER_CUSTOM_HELPER(ARG));
+    #define _PROFILING_SCOPED_TIMER_CUSTOM_HELPER(ARG) ARG ""
+    #define PROFILING_SCOPED_TIMER_CUSTOM(ARG) Profiling::ScopedTimer _PROFILING_COMBINE_NAME(__scopedTimer, __LINE__)(PROFILING_SCOPED_TIMER_CUSTOM_HELPER(ARG));
 #else
-    #define PROFILIG_SCOPED_TIMER_FUN()
-    #define PROFILIG_SCOPED_TIMER_CUSTOM(ARG) 
+    #define PROFILING_SCOPED_TIMER_FUN()
+    #define PROFILING_SCOPED_TIMER_CUSTOM(ARG) 
 #endif
     class ScopedTimer : public Timer {
     public:

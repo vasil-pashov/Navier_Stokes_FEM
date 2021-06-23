@@ -1005,7 +1005,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         printf("Output folder: %s\n", outFolder.c_str());
     }
 
-    PROFILIG_SCOPED_TIMER_FUN()
+    PROFILING_SCOPED_TIMER_FUN()
 
     SMM::TripletMatrix<real> triplet;
     SMM::TripletMatrix<real> dirichletWeightsTriplet;
