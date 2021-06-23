@@ -33,7 +33,7 @@ if(${WITH_ADDRESS_SANITIZER})
 		set(CMAKE_CXX_EXE_LINKER_FLAGS "${CMAKE_CXX_EXE_LINKER_FLAGS} ${_sanitizer_flags}")
 		unset(_sanitizer_flags)
 	else()
-		message(ERROR "Address sanitizing is supported only for Clang and GCC")
+		message(FATAL_ERROR "Address sanitizing is supported only for Clang and GCC")
 	endif()
 endif()
 
