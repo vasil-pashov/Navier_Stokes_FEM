@@ -63,15 +63,14 @@ float findSmallestSide(const FemGrid2D& grid) {
 void drawVectorPlot(
     cv::Mat& outputImage,
     const FemGrid2D& grid,
-    const SMM::real* const uVec,
-    const SMM::real* const vVec,
-    const SMM::real* const pressure,
+    const real* const uVec,
+    const real* const vVec,
+    const real* const pressure,
     const std::string& path,
     const int width,
     const int height,
     const float maxArrowLength
 ) {
-
     outputImage.setTo(cv::Scalar(255, 255, 255));
     // First find the maximal length, it will be used to as an end interval during heatmap
     // interpolation. Then find the max and min coordinate in x and y directions, this is

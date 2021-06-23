@@ -1,7 +1,5 @@
 #pragma once
-// Make sparse_matrix_math library use double. Must be before the incude of sparse_matrix_math.h
-#define SMM_DEBUG_DOUBLE
-#include <sparse_matrix_math/sparse_matrix_math.h>
+#include "sparse_matrix_math.h"
 #include <unordered_set>
 #include <grid.h>
 #include "error_code.h"
@@ -13,6 +11,8 @@
 #include "timer.h"
 
 namespace NSFem {
+
+using real = double;
 
 /// Draw 2D vector plot of the velocity field and save it as an image in the specified path
 /// @param[in] grid The grid where the simulation was done
@@ -27,9 +27,9 @@ namespace NSFem {
 void drawVectorPlot(
     cv::Mat& outputImage,
     const FemGrid2D& grid,
-    const SMM::real* const uVec,
-    const SMM::real* const vVec,
-    const SMM::real* const pressure,
+    const real* const uVec,
+    const real* const vVec,
+    const real* const pressure,
     const std::string& path,
     const int width,
     const int height,
@@ -57,8 +57,6 @@ void collectBoundaryNodes(
         ++begin;
     }
 }
-
-using real = double;
 
 /// Find the determinant of the Jacobi matrix for a linear transformation of random triangle to the unit one
 /// @param[in] elementNodes List of (x, y) coordinates in world space of the points which are going to be transformed.
@@ -290,40 +288,40 @@ private:
     /// thus we will assemble it only once and use the same matrix to compute all velocity components.
     /// Used to compute the tentative velocity at step i + 1/2. This matrix is constant for the given mesh and does not change
     /// when the time changes.
-    SMM::CSRMatrix velocityMassMatrix;
+    SMM::CSRMatrix<real> velocityMassMatrix;
 
     /// Stiffness matrix for the velocity formed by (del(fi_i), del(fi_j)) : forall i, j in 0...numVelocityNodes - 1
     /// Where fi_i is the i-th velocity basis function and viscosity is the fluid viscosity. This matrix is the same for the u and v
     /// components of the velocity, thus we will assemble it only once and use the same matrix to compute all velocity components.
     /// Used to compute the tentative velocity at step i + 1/2. This matrix is constant for the given mesh and does not change
     /// when the time changes.
-    SMM::CSRMatrix velocityStiffnessMatrix;
+    SMM::CSRMatrix<real> velocityStiffnessMatrix;
 
     /// Stiffness matrix for the velocity formed by (del(fi_i), del(fi_j)) : forall i, j in 0...numPressureNodes - 1
     /// Where fi_i is the i-th pressure basis function. This matrix is constant for the given mesh and does not change
     /// when the time changes.
-    SMM::CSRMatrix pressureStiffnessMatrix;
+    SMM::CSRMatrix<real> pressureStiffnessMatrix;
 
     /// Divergence matrices formed by (dfi_i/dx, chi_j) and (dfi_i/dy, chi_j) : forall i in numVelocityNodes - 1, j in 0...numPressureNodes - 1
     /// Where fi_i is the i-th velocity basis function and chi_j is the j-th pressure basis function
     /// These are used when pressure is found from the tentative velocity. These matrices are constant for the given mesh and do not change
     /// when the time changes. 
-    SMM::CSRMatrix velocityDivergenceMatrix;
+    SMM::CSRMatrix<real> velocityDivergenceMatrix;
 
     /// Divergence matrices formed by (fi_i, dchi_j/dx) and (fi_i, dchi_j/dy) : forall i in numVelocityNodes - 1, j in 0...numPressureNodes - 1
     /// Where fi_i is the i-th velocity basis function and chi_j is the j-th pressure basis function
     /// These are used when pressure is found from the tentative velocity. These matrices are constant for the given mesh and do not change
     /// when the time changes. 
-    SMM::CSRMatrix pressureDivergenceMatrix;
+    SMM::CSRMatrix<real> pressureDivergenceMatrix;
 
     /// Vector containing the approximate solution at each mesh node for the current time step
     /// First are the values in u direction for all nodes and the the values in v direction for all nodes
     /// When using P2-P1 elements the pressure is at the verices of the triangle and the midpoints of each side
-    SMM::Vector currentVelocitySolution;
+    SMM::Vector<real> currentVelocitySolution;
 
     /// Vector containing the approximate solution for the pressure at each pressure nodes
     /// When using P2-P1 elements the pressure is only at the vertices of the triangle
-    SMM::Vector currentPressureSolution;
+    SMM::Vector<real> currentPressureSolution;
 
     /// Path to a folder where the result for each iteration will be saved
     std::string outFolder;
@@ -373,8 +371,8 @@ private:
     void assembleBCMatrix(
         const TLocalF& localFunction,
         const std::unordered_set<int>& boundaryNodes,
-        SMM::TripletMatrix& out,
-        SMM::TripletMatrix& outBondaryWeights
+        SMM::TripletMatrix<real>& out,
+        SMM::TripletMatrix<real>& outBondaryWeights
     );
 
     /// Export the current solutions for velocity and pressure to a file
@@ -385,7 +383,7 @@ private:
     /// @tparam[Shape] The class representing the shape functions which are going to be used to assemble this matrix
     /// @param[out] out The resulting stiffness matrix
     template<typename Shape>
-    void assembleStiffnessMatrix(SMM::CSRMatrix& out);
+    void assembleStiffnessMatrix(SMM::CSRMatrix<real>& out);
 
     /// Handles assembling of the convection matrix. It does it directly by the formula and does not use
     /// precomputed integrals. In theory it's possible, but it would make the code too complicated as it
@@ -401,13 +399,13 @@ private:
     /// to iterate over all elements twice and also offset all indexes by the number of nodes for the second (y drection)
     /// matrix.
     template<typename RegularShape, typename DelShape, bool sideBySide>
-    void assembleDivergenceMatrix(SMM::CSRMatrix& out);
+    void assembleDivergenceMatrix(SMM::CSRMatrix<real>& out);
 
     /// Impose Dirichlet Boundary conditions on the velocity vector passed as an input
     /// @param[in, out] velocityVector Velocity vector where the Dirichlet BC will be imposed
     /// The vector must have all its u-velocity components at the begining, followed by all
     /// v-velocity components.
-    void imposeVelocityDirichlet(SMM::Vector& velocityVector);
+    void imposeVelocityDirichlet(SMM::Vector<real>& velocityVector);
 
     /// Use the semi-Lagrangian method to find the approximate value for the advectable quantities (velocity)
     /// The semi-Lagrangian method approximates directly the material derivative D()/Dt=0. For this method we are
@@ -686,8 +684,8 @@ template<int localRows, int localCols, typename TLocalF>
 void NavierStokesAssembly<VelocityShape, PressureShape>::assembleBCMatrix(
     const TLocalF& localFunction,
     const std::unordered_set<int>& boundaryNodes,
-    SMM::TripletMatrix& out,
-    SMM::TripletMatrix& outBondaryWeights
+    SMM::TripletMatrix<real>& out,
+    SMM::TripletMatrix<real>& outBondaryWeights
 ) {
     // IMPORTANT: This will work for symmetric matrices. It might work for not symmetric matrices
     // but I'm not sure. This procedure will keep the outBondaryWeights weights in transposed manner
@@ -755,9 +753,9 @@ NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly() :
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
     
-    SMM::CSRMatrix convectionMatrix; 
+    SMM::CSRMatrix<real> convectionMatrix; 
 
-    SMM::TripletMatrix triplet(grid.getNodesCount(), grid.getNodesCount());
+    SMM::TripletMatrix<real> triplet(grid.getNodesCount(), grid.getNodesCount());
 
     LocalMassFunctor<VelocityShape> localVelocityMass;
     triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
@@ -778,9 +776,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
     // triplet matrices which will hold the weights
     std::unordered_set<int> allBoundaryNodes;
     collectBoundaryNodes(grid.getPressureDirichletBegin(), grid.getPressureDirichletEnd(), allBoundaryNodes);   
-    SMM::TripletMatrix pressureDirichletWeightsTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
+    SMM::TripletMatrix<real> pressureDirichletWeightsTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
     LocalStiffnessFunctor<PressureShape> localPressureStuffness;
-    SMM::TripletMatrix pressureStiffnessTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
+    SMM::TripletMatrix<real> pressureStiffnessTriplet(grid.getPressureNodesCount(), grid.getPressureNodesCount());
     assembleBCMatrix<PressureShape::size, PressureShape::size>(
         localPressureStuffness,
         allBoundaryNodes,
@@ -788,7 +786,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
         pressureDirichletWeightsTriplet
     );
     pressureStiffnessMatrix.init(pressureStiffnessTriplet);
-    SMM::CSRMatrix pressureDirichletWeights;
+    SMM::CSRMatrix<real> pressureDirichletWeights;
     pressureDirichletWeights.init(pressureDirichletWeightsTriplet);
      
     assembleDivergenceMatrix<PressureShape, VelocityShape, true>(velocityDivergenceMatrix);
@@ -804,20 +802,20 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
     currentVelocitySolution.init(nodesCount * 2, 0.0f);
     currentPressureSolution.init(grid.getPressureNodesCount(), real(0));
     imposeVelocityDirichlet(currentVelocitySolution);
-    SMM::Vector velocityRhs(nodesCount * 2, 0);
-    SMM::Vector pressureRhs(grid.getPressureNodesCount(), real(0));
-    SMM::Vector tmp(nodesCount);
+    SMM::Vector<real> velocityRhs(nodesCount * 2, 0);
+    SMM::Vector<real> pressureRhs(grid.getPressureNodesCount(), real(0));
+    SMM::Vector<real> tmp(nodesCount);
 
     std::unordered_map<char, float> pressureVars;
 
     exportSolution(0);
 
-    SMM::CSRMatrix::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
+    SMM::CSRMatrix<real>::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
     {
         [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
     }
-    SMM::CSRMatrix::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
+    SMM::CSRMatrix<real>::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
     {
         [[maybe_unused]]const int preconditionError = pressureStiffnessIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
@@ -844,8 +842,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
 
         // Assemble tentative velocity system rhs
         assert(convectionMatrix.hasSameNonZeroPattern(velocityMassMatrix) && convectionMatrix.hasSameNonZeroPattern(velocityStiffnessMatrix));
-        SMM::CSRMatrix::ConstIterator convectionIt = convectionMatrix.begin();
-        SMM::CSRMatrix::ConstIterator velStiffnessIt = velocityStiffnessMatrix.begin();
+        SMM::CSRMatrix<real>::ConstIterator convectionIt = convectionMatrix.begin();
+        SMM::CSRMatrix<real>::ConstIterator velStiffnessIt = velocityStiffnessMatrix.begin();
         for(;convectionIt != convectionMatrix.end(); ++convectionIt, ++velStiffnessIt) {
             const int row = convectionIt->getRow();
             const int col = convectionIt->getCol();
@@ -861,9 +859,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
         // Solve for the u component.
         solveStatus = SMM::ConjugateGradient(
             velocityMassMatrix,
-            velocityRhs,
-            currentVelocitySolution,
-            tmp,
+            static_cast<real*>(velocityRhs),
+            static_cast<real*>(currentVelocitySolution),
+            static_cast<real*>(tmp),
             -1,
             eps,
             velocityMassIC0
@@ -876,9 +874,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
         // Solve for the v component
         solveStatus = SMM::ConjugateGradient(
             velocityMassMatrix,
-            velocityRhs + nodesCount,
-            currentVelocitySolution + nodesCount,
-            tmp,
+            static_cast<real*>(velocityRhs) + nodesCount,
+            static_cast<real*>(currentVelocitySolution) + nodesCount,
+            static_cast<real*>(tmp),
             -1,
             eps,
             velocityMassIC0
@@ -911,8 +909,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
                 float pBoundary = 0;
                 boundary.eval(&pressureVars, pBoundary);
                 pressureRhs[nodeIndex] = pBoundary;
-                SMM::CSRMatrix::ConstRowIterator it = pressureDirichletWeights.rowBegin(nodeIndex);
-                const SMM::CSRMatrix::ConstRowIterator end = pressureDirichletWeights.rowEnd(nodeIndex);
+                SMM::CSRMatrix<real>::ConstRowIterator it = pressureDirichletWeights.rowBegin(nodeIndex);
+                const SMM::CSRMatrix<real>::ConstRowIterator end = pressureDirichletWeights.rowEnd(nodeIndex);
                 while(it != end) {
                     pressureRhs[it->getCol()] -= it->getValue() * pBoundary;
                     ++it;
@@ -923,9 +921,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
         // Finally solve the linear system for the pressure
         solveStatus = SMM::ConjugateGradient(
             pressureStiffnessMatrix,
-            pressureRhs,
-            currentPressureSolution,
-            currentPressureSolution,
+            static_cast<real*>(pressureRhs),
+            static_cast<real*>(currentPressureSolution),
+            static_cast<real*>(currentPressureSolution),
             -1,
             eps,
             pressureStiffnessIC0
@@ -945,9 +943,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
         // Solve for the u component
         solveStatus = SMM::ConjugateGradient(
             velocityMassMatrix,
-            velocityRhs,
-            currentVelocitySolution,
-            tmp,
+            static_cast<real*>(velocityRhs),
+            static_cast<real*>(currentVelocitySolution),
+            static_cast<real*>(tmp),
             -1,
             eps,
             velocityMassIC0
@@ -960,9 +958,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
         // Solve for the v component
         solveStatus = SMM::ConjugateGradient(
             velocityMassMatrix,
-            velocityRhs + nodesCount,
-            currentVelocitySolution + nodesCount,
-            tmp,
+            static_cast<real*>(velocityRhs) + nodesCount,
+            static_cast<real*>(currentVelocitySolution) + nodesCount,
+            static_cast<real*>(tmp),
             -1,
             eps,
             velocityMassIC0
@@ -1009,8 +1007,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
     PROFILIG_SCOPED_TIMER_FUN()
 
-    SMM::TripletMatrix triplet;
-    SMM::TripletMatrix dirichletWeightsTriplet;
+    SMM::TripletMatrix<real> triplet;
+    SMM::TripletMatrix<real> dirichletWeightsTriplet;
     std::unordered_set<int> allBoundaryNodes;
     
     
@@ -1045,7 +1043,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     collectBoundaryNodes(grid.getVelocityDirichletBegin(), grid.getVelocityDirichletEnd(), allBoundaryNodes);
     triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
     dirichletWeightsTriplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
-    SMM::CSRMatrix diffusionMatrix;
+    SMM::CSRMatrix<real> diffusionMatrix;
     assembleBCMatrix<VelocityShape::size, VelocityShape::size>(
         diffusionMatrixLocal,
         allBoundaryNodes,
@@ -1054,14 +1052,14 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     );
     diffusionMatrix.init(triplet);
 
-    SMM::CSRMatrix velocityDirichletWeights;
+    SMM::CSRMatrix<real> velocityDirichletWeights;
     velocityDirichletWeights.init(dirichletWeightsTriplet);
 
     triplet.deinit();
     dirichletWeightsTriplet.deinit();
     allBoundaryNodes.clear();
 
-    SMM::CSRMatrix::IC0Preconditioner diffusionIC0(diffusionMatrix);
+    SMM::CSRMatrix<real>::IC0Preconditioner diffusionIC0(diffusionMatrix);
     {
         [[maybe_unused]]const int preconditionError = diffusionIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
@@ -1083,7 +1081,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     );
     pressureStiffnessMatrix.init(triplet);
 
-    SMM::CSRMatrix pressureDirichletWeights;
+    SMM::CSRMatrix<real> pressureDirichletWeights;
     pressureDirichletWeights.init(dirichletWeightsTriplet);
 
     triplet.deinit();
@@ -1107,22 +1105,22 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     currentVelocitySolution.init(nodesCount * 2, 0.0f);
     currentPressureSolution.init(grid.getPressureNodesCount(), real(0));
     imposeVelocityDirichlet(currentVelocitySolution);
-    SMM::Vector velocityRhs(nodesCount * 2, 0);
-    SMM::Vector pressureRhs(grid.getPressureNodesCount(), real(0));
-    SMM::Vector tmp(nodesCount * 2, 0);
+    SMM::Vector<real> velocityRhs(nodesCount * 2, 0);
+    SMM::Vector<real> pressureRhs(grid.getPressureNodesCount(), real(0));
+    SMM::Vector<real> tmp(nodesCount * 2, 0);
 
     std::unordered_map<char, float> pressureVars;
     std::unordered_map<char, float> velocityVars;
 
     exportSolution(0);
 
-    SMM::CSRMatrix::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
+    SMM::CSRMatrix<real>::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
     {
         [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
     }
 
-    SMM::CSRMatrix::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
+    SMM::CSRMatrix<real>::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
     {
         [[maybe_unused]]const int preconditionError = pressureStiffnessIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
@@ -1167,8 +1165,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 float pBoundary = 0;
                 boundary.eval(&pressureVars, pBoundary);
                 pressureRhs[nodeIndex] = pBoundary;
-                SMM::CSRMatrix::ConstRowIterator it = pressureDirichletWeights.rowBegin(nodeIndex);
-                const SMM::CSRMatrix::ConstRowIterator end = pressureDirichletWeights.rowEnd(nodeIndex);
+                SMM::CSRMatrix<real>::ConstRowIterator it = pressureDirichletWeights.rowBegin(nodeIndex);
+                const SMM::CSRMatrix<real>::ConstRowIterator end = pressureDirichletWeights.rowEnd(nodeIndex);
                 while(it != end) {
                     pressureRhs[it->getCol()] -= it->getValue() * pBoundary;
                     ++it;
@@ -1179,9 +1177,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         // Finally solve the linear system for the pressure
         solveStatus = SMM::ConjugateGradient(
             pressureStiffnessMatrix,
-            pressureRhs,
-            currentPressureSolution,
-            currentPressureSolution,
+            static_cast<real*>(pressureRhs),
+            static_cast<real*>(currentPressureSolution),
+            static_cast<real*>(currentPressureSolution),
             -1,
             eps,
             pressureStiffnessIC0
@@ -1199,9 +1197,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         // Solve for the u component
         solveStatus = SMM::ConjugateGradient(
             velocityMassMatrix,
-            velocityRhs,
-            tmp,
-            currentVelocitySolution,
+            static_cast<real*>(velocityRhs),
+            static_cast<real*>(tmp),
+            static_cast<real*>(currentVelocitySolution),
             -1,
             eps,
             velocityMassIC0
@@ -1248,8 +1246,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 boundary.eval(&velocityVars, uBoundary, vBoundary);
                 velocityRhs[nodeIndex] = uBoundary;
                 velocityRhs[nodeIndex + nodesCount] = vBoundary;
-                SMM::CSRMatrix::ConstRowIterator it = velocityDirichletWeights.rowBegin(nodeIndex);
-                const SMM::CSRMatrix::ConstRowIterator end = velocityDirichletWeights.rowEnd(nodeIndex);
+                SMM::CSRMatrix<real>::ConstRowIterator it = velocityDirichletWeights.rowBegin(nodeIndex);
+                const SMM::CSRMatrix<real>::ConstRowIterator end = velocityDirichletWeights.rowEnd(nodeIndex);
                 while(it != end) {
                     velocityRhs[it->getCol()] -= it->getValue() * uBoundary;
                     velocityRhs[it->getCol() + nodesCount] -= it->getValue() * vBoundary;;
@@ -1260,9 +1258,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
         solveStatus = SMM::ConjugateGradient(
             diffusionMatrix,
-            velocityRhs,
-            currentVelocitySolution,
-            currentVelocitySolution,
+            static_cast<real*>(velocityRhs),
+            static_cast<real*>(currentVelocitySolution),
+            static_cast<real*>(currentVelocitySolution),
             -1,
             eps,
             diffusionIC0
@@ -1285,7 +1283,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 }
 
 template<typename VelocityShape, typename PressureShape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::imposeVelocityDirichlet(SMM::Vector& velocityVector) {
+void NavierStokesAssembly<VelocityShape, PressureShape>::imposeVelocityDirichlet(SMM::Vector<real>& velocityVector) {
     const int nodesCount = grid.getNodesCount();
     const int velocityDirichletCount = grid.getVelocityDirichletSize();
     FemGrid2D::VelocityDirichletConstIt velocityDirichletBoundaries = grid.getVelocityDirichletBegin();
@@ -1354,7 +1352,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleConvectionMatri
 
 template<typename VelocityShape, typename PressureShape>
 template<typename RegularShape, typename DelShape, bool sideBySide>
-void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatrix(SMM::CSRMatrix& out) {
+void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatrix(SMM::CSRMatrix<real>& out) {
     const int numNodes = grid.getNodesCount();
     const int numElements = grid.getElementsCount();
     const int elementSize = std::max(RegularShape::size, DelShape::size);
@@ -1364,7 +1362,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatri
     // IMPORTANT: The current implementation works only for P2-P1 shape function combination
     const int rows = sideBySide ? grid.getPressureNodesCount() : numNodes * 2;
     const int cols = sideBySide ? numNodes * 2 : grid.getPressureNodesCount();
-    SMM::TripletMatrix triplet(rows, cols);
+    SMM::TripletMatrix<real> triplet(rows, cols);
     StaticMatrix<real, RegularShape::size, DelShape::size> divLocalX;
     StaticMatrix<real, RegularShape::size, DelShape::size> divLocalY;
     LocalDivergenceFunctor<RegularShape, DelShape> localFunctor;

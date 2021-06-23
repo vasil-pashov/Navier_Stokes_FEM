@@ -65,13 +65,15 @@ set(HEADERS
 	include/timer.h
 	include/cmd_line_parser.h
 	include/small_vector.h
+	sparse_matrix_math/include/sparse_matrix_math.h
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
 
 find_package(OpenCV REQUIRED CONFIG)
 
-target_include_directories(${PROJECT_NAME} PRIVATE include sparse_matrix_math/include)
+target_include_directories(${PROJECT_NAME} PRIVATE include)
+target_include_directories(${PROJECT_NAME} PRIVATE sparse_matrix_math/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE cpp_tm::cpp_tm)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json opencv::opencv)
 
@@ -93,3 +95,5 @@ endif()
 if(${WITH_PROFILIG_SCOPED_TIMERS})
 	target_compile_definitions(${PROJECT_NAME} PRIVATE WITH_PROFILIG_SCOPED_TIMERS)
 endif()
+
+add_subdirectory(sparse_matrix_math)
