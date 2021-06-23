@@ -79,7 +79,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json openc
 
 if(NOT MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE 
-		-Wall -Wextra -pedantic $<$<CONFIG:DEBUG>:-fno-limit-debug-info> -fno-exceptions -fno-rtti
+		-Wall
+		-Wextra
+		-pedantic
+		$<$<CONFIG:DEBUG>:-fno-limit-debug-info>
+		-fno-exceptions
+		-fno-rtti
+		-ffast-math
 	)
 endif()
 
