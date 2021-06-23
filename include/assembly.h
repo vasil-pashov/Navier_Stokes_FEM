@@ -12,8 +12,6 @@
 
 namespace NSFem {
 
-using real = double;
-
 /// Draw 2D vector plot of the velocity field and save it as an image in the specified path
 /// @param[in] grid The grid where the simulation was done
 /// @param[in] uVec The velocity in u direction. Ordered the same way as the nodes in the grid are.

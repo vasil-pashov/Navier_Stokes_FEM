@@ -29,7 +29,7 @@ public:
     /// Add new element at the end of the vector. The content is copied.
     /// @param[in] el The element which will be added to the vector
     void pushBack(const T& el) {
-        assert(firstFreePosition < size);
+        assert(firstFreePosition < capacity);
         data[firstFreePosition] = el;
         firstFreePosition++;
     }
@@ -37,7 +37,7 @@ public:
     /// Add new element at the end of the vector. The content is moved.
     /// @param[in] el The element which will be added to the vector
     void pushBack(T&& el) {
-        assert(firstFreePosition < size);
+        assert(firstFreePosition < capacity);
         data[firstFreePosition] = std::move(el);
         firstFreePosition++;
     }
@@ -46,7 +46,7 @@ public:
     /// passed arguments, which are forwared to the consructor.
     template<typename... ArgsT>
     void emplaceBack(ArgsT&&... args) {
-        assert(firstFreePosition < size);
+        assert(firstFreePosition < capacity);
         data[firstFreePosition] = T(std::forward<ArgsT>(args)...);
         firstFreePosition++;
     }

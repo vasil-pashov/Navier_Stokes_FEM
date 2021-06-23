@@ -119,26 +119,26 @@ void drawVectorPlot(
     const real maxLength = std::sqrt(maxLenSq);
     real maxU = 0;
     real maxV = 0;
+
     for(int i = 0; i < numNodes; ++i) {
         real maxU = uVec[0];
         real maxV = vVec[0];
         const real length = sqrt(uVec[i] * uVec[i] + vVec[i] * vVec[i]);
-        const real lengthScaled = length * (maxArrowLength / maxLength);
-        const real x = nodes[2 * i];
-        const real y = nodes[2 * i + 1];
-        const real xEnd = x + lengthScaled * uVec[i];
-        const real yEnd = y + lengthScaled * vVec[i];
+        const real lengthScaled = maxLength != 0 ? length / maxLength : 0;
+        const Point2D& node = grid.getNode(i);
+        Point2D direction(uVec[i], vVec[i]);
+        const Point2D& end = node + direction * (150.0 / xScale);
 
-        const real xImageSpace = xOffset + x * xScale - xScale * minX;
-        const real yImageSpace = yOffset + y * yScale - yScale * minY;
+        const real xImageSpace = xOffset + node.x * xScale - xScale * minX;
+        const real yImageSpace = yOffset + node.y * yScale - yScale * minY;
 
-        const real xEndImageSpace = xOffset + xEnd * xScale - xScale * minX;
-        const real yEndImageSpace = yOffset + yEnd * yScale  -yScale * minY;
+        const real xEndImageSpace = xOffset + end.x * xScale - xScale * minX;
+        const real yEndImageSpace = yOffset + end.y * yScale  -yScale * minY;
 
         maxU = std::max(maxU, (real)uVec[i]);
         maxV = std::max(maxV, (real)vVec[i]);
 
-        const cv::Scalar velocityHeat = heatmap(lengthScaled, 0, maxArrowLength);
+        const cv::Scalar velocityHeat = heatmap(lengthScaled, 0, 1);
 
         // Draw the velocity
         cv::arrowedLine(
