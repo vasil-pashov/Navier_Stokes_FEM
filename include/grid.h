@@ -7,7 +7,7 @@
 
 namespace NSFem {
 
-using real = double;
+using real = float;
 
 struct Point2D {
     Point2D() : x(0), y(0) {}
