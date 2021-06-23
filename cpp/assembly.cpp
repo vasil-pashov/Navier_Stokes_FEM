@@ -69,7 +69,7 @@ void drawVectorPlot(
     const std::string& path,
     const int width,
     const int height,
-    const float maxArrowLength
+    const int maxArrowLengthInPixels
 ) {
     outputImage.setTo(cv::Scalar(255, 255, 255));
     // First find the maximal length, it will be used to as an end interval during heatmap
@@ -127,7 +127,7 @@ void drawVectorPlot(
         const real lengthScaled = maxLength != 0 ? length / maxLength : 0;
         const Point2D& node = grid.getNode(i);
         Point2D direction(uVec[i], vVec[i]);
-        const Point2D& end = node + direction * (150.0 / xScale);
+        const Point2D& end = node + direction * (maxArrowLengthInPixels / xScale);
 
         const real xImageSpace = xOffset + node.x * xScale - xScale * minX;
         const real yImageSpace = yOffset + node.y * yScale - yScale * minY;

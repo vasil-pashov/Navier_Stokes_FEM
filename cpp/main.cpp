@@ -94,6 +94,12 @@ int main(int nargs, char** cargs) {
         CMD::CommandLineArgs::Type::Int,
         false
     );
+    argParse.addParam(
+        "outPath",
+        "Path to a folder where the resulting caches and images will be saved",
+        CMD::CommandLineArgs::Type::String,
+        false
+    );
 
     if(nargs == 2 && strcmp(cargs[1], "-help") == 0) {
         argParse.print(stdout);
@@ -108,7 +114,10 @@ int main(int nargs, char** cargs) {
         return 1;
     }
     NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
-    error = assembler.init(argParse.getStringVal("sceneFile"));
+    error = assembler.init(
+        argParse.getStringVal("sceneFile"),
+        argParse.getStringVal("outPath")
+    );
     if(error.hasError()) {
         fprintf(stderr, "[Error] %s\n", error.getMessage());
         return 1;

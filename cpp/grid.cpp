@@ -6,12 +6,15 @@
 
 namespace NSFem {
 
-int FemGrid2D::loadJSON(const char* filePath) {
+EC::ErrorCode FemGrid2D::loadJSON(const char* filePath) {
     bbox.reset();
     std::ifstream jsonFile(filePath);
+    if(!jsonFile.is_open()) {
+        return EC::ErrorCode(1, "Cannot open JSON file: %s", filePath);
+    }
     auto data = nlohmann::json::parse(jsonFile, nullptr, false);
     if(data.is_discarded()) {
-        return 1;
+        return EC::ErrorCode(2, "Cannot parse JSON file: %s", filePath);
     }
     elementsCount = data["elementsCount"];
     velocityNodesCount = data["velocityNodesCount"];
@@ -48,13 +51,11 @@ int FemGrid2D::loadJSON(const char* filePath) {
         const std::string& v = data["uDirichlet"][i]["v"];
         error = velocityDirichlet[i].u.init(u.c_str());
         if(error.hasError()) {
-            assert(false);
-            return 1;
+            return error;
         }
         error = velocityDirichlet[i].v.init(v.c_str());
         if(error.hasError()) {
-            assert(false);
-            return 1;
+            return error;
         }
     }
 
@@ -69,12 +70,11 @@ int FemGrid2D::loadJSON(const char* filePath) {
         const std::string& p = data["pDirichlet"][i]["p"];
         error = pressureDirichlet[i].p.init(p.c_str());
         if(error.hasError()) {
-            assert(false);
-            return 1;
+            return error; 
         }
     }
 
-    return 0;
+    return EC::ErrorCode();
 }
 
 void FemGrid2D::VelocityDirichlet::eval(

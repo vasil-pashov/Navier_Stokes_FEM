@@ -161,7 +161,7 @@ public:
     /// Load mesh written in JSON file format
     /// @param[in] filePath Path the the mesh file
     /// @returns Status code: 0 on success
-    int loadJSON(const char* filePath);
+    EC::ErrorCode loadJSON(const char* filePath);
 
     using VelocityDirichletConstIt = std::vector<VelocityDirichlet>::const_iterator;
     /// Get the number of different boundaries where Dirichlet condition is imposed for the velocity

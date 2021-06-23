@@ -31,7 +31,7 @@ void drawVectorPlot(
     const std::string& path,
     const int width,
     const int height,
-    const float maxArrowLength
+    const int maxArrowLengthInPixels
 );
 
 /// Find the smapplest triangle side all of all triangles. Used to scale the vector plot points.
@@ -268,7 +268,7 @@ template<typename VelocityShape, typename PressureShape>
 class NavierStokesAssembly {
 public:
     NavierStokesAssembly();
-    EC::ErrorCode init(const char* simDescriptionPath);
+    EC::ErrorCode init(const char* simDescriptionPath, const char* outPath);
     void solve();
     void semiLagrangianSolve();
     void setTimeStep(const real dt);
@@ -342,10 +342,6 @@ private:
     /// OpenCV matrix which will is used when exporting image results. It will be filled with
     /// the corresponding colors and then written to an image file on the hard disk inside the output folder.
     cv::Mat outputImage;
-
-    /// Used only when printing plots is enabled. This is the minimal length of all triangle sides of all elements
-    /// Vector length will be scaled according to this.
-    float minSideLen;
 
     template<int localRows, int localCols, typename TLocalF, typename Triplet>
     void assembleMatrix(const TLocalF& localFunction, Triplet& triplet);
@@ -580,17 +576,23 @@ private:
 };
 
 template<typename VelocityShape, typename PressureShape>
-EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(const char* simDescriptionPath) {
+EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
+    const char* simDescriptionPath,
+    const char* outPath
+) {
     std::fstream simDescriptionFile(simDescriptionPath);
     if(!simDescriptionFile.is_open()) {
-        return EC::ErrorCode(1, "Could not find desciption file");
+        return EC::ErrorCode(1, "Could not find desciption file: %s", simDescriptionPath);
     }
     nlohmann::basic_json simJson;
     simDescriptionFile >> simJson;
-    if(!simJson["mesh_path"].is_string() ||
-        grid.loadJSON(simJson["mesh_path"].get_ptr<std::string*>()->c_str())
-    ) {
-        return EC::ErrorCode(2, "Could not load mesh");
+    if(!simJson["mesh_path"].is_string()) {
+        return EC::ErrorCode(2, "Missing path to mesh.");
+    } else {
+        EC::ErrorCode error = grid.loadJSON(simJson["mesh_path"].get_ptr<std::string*>()->c_str());
+        if(error.hasError()) {
+            return error;
+        }
     }
     if(simJson.contains("dt") && simJson["dt"].is_number()) {
         dt = simJson["dt"];
@@ -607,11 +609,8 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(const cha
     } else {
         return EC::ErrorCode(3, "Missing required param: total_time");
     }
-    if(simJson.contains("output_folder") && simJson["output_folder"].is_string()) {
-        outFolder = simJson["output_folder"];
-        minSideLen = findSmallestSide(grid);
-    } else {
-        minSideLen = 0;
+    if(outPath != nullptr) {
+        outFolder = outPath;
     }
 
     kdTree.init(&grid);
@@ -672,7 +671,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         velocityFieldPath.c_str(),
         outputImageWidth,
         outputImageHeight,
-        minSideLen
+        150
     );
     
 }
