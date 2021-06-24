@@ -661,7 +661,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         assert(false && "Failed to open file for writing the result");
     }
 
-    const std::string& velocityFieldPath = outFolder + "/velocity_field_" + std::to_string(timeStep) + ".bmp";
+    const std::string& velocityFieldPath = outFolder + "/velocity_field_" + std::to_string(timeStep) + ".jpeg";
     drawVectorPlot(
         outputImage,
         grid,
