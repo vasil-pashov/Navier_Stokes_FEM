@@ -671,7 +671,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         velocityFieldPath.c_str(),
         outputImageWidth,
         outputImageHeight,
-        150
+        50
     );
     
 }

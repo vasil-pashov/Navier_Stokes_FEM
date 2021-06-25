@@ -125,8 +125,9 @@ void drawVectorPlot(
         real maxV = vVec[0];
         const real length = sqrt(uVec[i] * uVec[i] + vVec[i] * vVec[i]);
         const real lengthScaled = maxLength != 0 ? length / maxLength : 0;
+        assert(lengthScaled <= 1);
         const Point2D& node = grid.getNode(i);
-        Point2D direction(uVec[i], vVec[i]);
+        Point2D direction = Point2D(uVec[i], vVec[i]) * (length > 0 ? 1.0 / maxLength : 0);
         const Point2D& end = node + direction * (maxArrowLengthInPixels / xScale);
 
         const real xImageSpace = xOffset + node.x * xScale - xScale * minX;
