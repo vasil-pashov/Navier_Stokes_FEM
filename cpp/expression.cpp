@@ -1,4 +1,3 @@
-#define _USE_MATH_DEFINES
 #include "expression.h"
 #include "error_code.h"
 #include <cctype>

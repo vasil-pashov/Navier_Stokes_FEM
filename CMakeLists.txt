@@ -76,6 +76,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE include)
 target_include_directories(${PROJECT_NAME} PRIVATE sparse_matrix_math/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE cpp_tm::cpp_tm)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json opencv::opencv)
+target_compile_definitions(${PROJECT_NAME} PRIVATE -D_USE_MATH_DEFINES)
 
 if(NOT MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE 
@@ -87,6 +88,12 @@ if(NOT MSVC)
 		-fno-rtti
 		-ffast-math
 	)
+else()
+	target_compile_definitions(${PROJECT_NAME} PRIVATE
+		/fp:fast
+		/GR-
+		/EHsc
+	)
 endif()
 
 if(${WITH_GBENCH})
@@ -95,7 +102,11 @@ if(${WITH_GBENCH})
 endif()
 
 if(${WITH_CPU_PROFILER})
-	target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer -g)
+	if(NOT MSVC)
+		target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer -g)
+	else()
+		target_compile_options(${PROJECT_NAME} PRIVATE /Oy- /Zi)
+	endif()
 endif()
 
 if(${WITH_PROFILING_SCOPED_TIMERS})
