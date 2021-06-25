@@ -43,7 +43,12 @@ def main():
     for i in range(0, args.runs):
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
-            print("Run {} completed".format(i))
+            print("Run {} completed\n".format(i))
+            print("===========================================\n")
+            print("Run output\n")
+            print(result.stdout)
+            print("===========================================\n")
+            print("All timer data for the run")
             parseOutput(result.stdout, allFunctionTimes)
         except subprocess.CalledProcessError as ex:
             print("Error: {} occured while trying to run running {}".format(result.stderr, command))
