@@ -9,6 +9,7 @@
 #include "error_code.h"
 #include "expression.h"
 #include "cmd_line_parser.h"
+#include <cpp_tm/cpp_tm.h>
 
 enum SolverMethod {
     FEM,
@@ -113,7 +114,18 @@ int main(int nargs, char** cargs) {
         argParse.print(stderr);
         return 1;
     }
-    NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
+    unsigned int numThreads = [&]() -> unsigned int {
+        const int* threads = argParse.getIntVal("numThreads");
+        if(threads != nullptr) {
+            return *threads;
+        } else {
+            return std::thread::hardware_concurrency() - 1;
+        }
+    }();
+
+    CPPTM::ThreadManager tm(numThreads);
+
+    NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(tm);
     error = assembler.init(
         argParse.getStringVal("sceneFile"),
         argParse.getStringVal("outPath")

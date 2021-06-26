@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <opencv2/imgproc.hpp>
 #include "timer.h"
+#include <cpp_tm/cpp_tm.h>
 
 namespace NSFem {
 
@@ -267,7 +268,7 @@ private:
 template<typename VelocityShape, typename PressureShape>
 class NavierStokesAssembly {
 public:
-    NavierStokesAssembly();
+    NavierStokesAssembly(CPPTM::ThreadManager& tm);
     EC::ErrorCode init(const char* simDescriptionPath, const char* outPath);
     void solve();
     void semiLagrangianSolve();
@@ -342,6 +343,8 @@ private:
     /// OpenCV matrix which will is used when exporting image results. It will be filled with
     /// the corresponding colors and then written to an image file on the hard disk inside the output folder.
     cv::Mat outputImage;
+
+    CPPTM::ThreadManager& tm;
 
     template<int localRows, int localCols, typename TLocalF, typename Triplet>
     void assembleMatrix(const TLocalF& localFunction, Triplet& triplet);
@@ -739,10 +742,11 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleMatrix(const TL
 }
 
 template<typename VelocityShape, typename PressureShape>
-NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly() :
+NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(CPPTM::ThreadManager& tm) :
     outputImageWidth(1366),
     outputImageHeight(768),
-    outputImage(outputImageHeight, outputImageWidth, CV_8UC3, cv::Scalar(255, 255, 255))
+    outputImage(outputImageHeight, outputImageWidth, CV_8UC3, cv::Scalar(255, 255, 255)),
+    tm(tm)
 {
 
 }
