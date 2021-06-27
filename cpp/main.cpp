@@ -9,7 +9,7 @@
 #include "error_code.h"
 #include "expression.h"
 #include "cmd_line_parser.h"
-#include <cpp_tm/cpp_tm.h>
+#include "tbb/task_scheduler_init.h"
 
 enum SolverMethod {
     FEM,
@@ -114,18 +114,18 @@ int main(int nargs, char** cargs) {
         argParse.print(stderr);
         return 1;
     }
-    unsigned int numThreads = [&]() -> unsigned int {
+    int numThreads = [&]() -> int {
         const int* threads = argParse.getIntVal("numThreads");
         if(threads != nullptr) {
             return *threads;
         } else {
-            return std::thread::hardware_concurrency() - 1;
+            return tbb::task_scheduler_init::default_num_threads();
         }
     }();
 
-    CPPTM::ThreadManager tm(numThreads);
+    tbb::task_scheduler_init init(numThreads);
 
-    NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler(tm);
+    NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
     error = assembler.init(
         argParse.getStringVal("sceneFile"),
         argParse.getStringVal("outPath")

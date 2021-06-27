@@ -10,6 +10,8 @@
 #include <opencv2/imgproc.hpp>
 #include "timer.h"
 #include <cpp_tm/cpp_tm.h>
+#include "tbb/blocked_range.h"
+#include "tbb/parallel_for.h"
 
 namespace NSFem {
 
@@ -268,7 +270,7 @@ private:
 template<typename VelocityShape, typename PressureShape>
 class NavierStokesAssembly {
 public:
-    NavierStokesAssembly(CPPTM::ThreadManager& tm);
+    NavierStokesAssembly();
     EC::ErrorCode init(const char* simDescriptionPath, const char* outPath);
     void solve();
     void semiLagrangianSolve();
@@ -343,8 +345,6 @@ private:
     /// OpenCV matrix which will is used when exporting image results. It will be filled with
     /// the corresponding colors and then written to an image file on the hard disk inside the output folder.
     cv::Mat outputImage;
-
-    CPPTM::ThreadManager& tm;
 
     template<int localRows, int localCols, typename TLocalF, typename Triplet>
     void assembleMatrix(const TLocalF& localFunction, Triplet& triplet);
@@ -742,11 +742,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleMatrix(const TL
 }
 
 template<typename VelocityShape, typename PressureShape>
-NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly(CPPTM::ThreadManager& tm) :
+NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly() :
     outputImageWidth(1366),
     outputImageHeight(768),
-    outputImage(outputImageHeight, outputImageWidth, CV_8UC3, cv::Scalar(255, 255, 255)),
-    tm(tm)
+    outputImage(outputImageHeight, outputImageWidth, CV_8UC3, cv::Scalar(255, 255, 255))
 {
 
 }
@@ -1401,11 +1400,11 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     
     static_assert(VelocityShape::size == 6, "Only P2-P1 elements are supported");
     assert(grid.getElementSize() == VelocityShape::size && "Only P2-P1 elements are supported");
-    tm.launchSync([&](int blockIndex, int numBlocks) {
-        const CPPTM::LoopBlockData block(blockIndex, numBlocks, velocityNodesCount);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0,velocityNodesCount),
+        [&](const tbb::blocked_range<size_t>& r) {
         Point2D elementNodes[VelocityShape::size];
         int elementIndexes[VelocityShape::size];
-        for(int i = block.start; i < block.end; ++i) {
+        for(int i = r.begin(); i < r.end(); ++i) {
             const Point2D position(velocityNodes[2*i], velocityNodes[2*i + 1]);
             const Point2D velocity(uVelocity[i], vVelocity[i]);
             const Point2D start = position - velocity * dt;
