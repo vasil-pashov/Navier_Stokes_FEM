@@ -120,86 +120,95 @@ void drawVectorPlot(
     real maxU = 0;
     real maxV = 0;
 
-    for(int i = 0; i < numNodes; ++i) {
-        real maxU = uVec[0];
-        real maxV = vVec[0];
-        const real length = sqrt(uVec[i] * uVec[i] + vVec[i] * vVec[i]);
-        const real lengthScaled = maxLength != 0 ? length / maxLength : 0;
-        assert(lengthScaled <= 1);
-        const Point2D& node = grid.getNode(i);
-        Point2D direction = Point2D(uVec[i], vVec[i]) * (length > 0 ? 1.0 / maxLength : 0);
-        const Point2D& end = node + direction * (maxArrowLengthInPixels / xScale);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0,numNodes),
+        [&](const tbb::blocked_range<size_t>& r) {
+            for(int i = r.begin(); i < r.end(); ++i) {
+                real maxU = uVec[0];
+                real maxV = vVec[0];
+                const real length = sqrt(uVec[i] * uVec[i] + vVec[i] * vVec[i]);
+                const real lengthScaled = maxLength != 0 ? length / maxLength : 0;
+                assert(lengthScaled <= 1);
+                const Point2D& node = grid.getNode(i);
+                Point2D direction = Point2D(uVec[i], vVec[i]) * (length > 0 ? 1.0 / maxLength : 0);
+                const Point2D& end = node + direction * (maxArrowLengthInPixels / xScale);
 
-        const real xImageSpace = xOffset + node.x * xScale - xScale * minX;
-        const real yImageSpace = yOffset + node.y * yScale - yScale * minY;
+                const real xImageSpace = xOffset + node.x * xScale - xScale * minX;
+                const real yImageSpace = yOffset + node.y * yScale - yScale * minY;
 
-        const real xEndImageSpace = xOffset + end.x * xScale - xScale * minX;
-        const real yEndImageSpace = yOffset + end.y * yScale  -yScale * minY;
+                const real xEndImageSpace = xOffset + end.x * xScale - xScale * minX;
+                const real yEndImageSpace = yOffset + end.y * yScale  -yScale * minY;
 
-        maxU = std::max(maxU, (real)uVec[i]);
-        maxV = std::max(maxV, (real)vVec[i]);
+                maxU = std::max(maxU, (real)uVec[i]);
+                maxV = std::max(maxV, (real)vVec[i]);
 
-        const cv::Scalar velocityHeat = heatmap(lengthScaled, 0, 1);
+                const cv::Scalar velocityHeat = heatmap(lengthScaled, 0, 1);
 
-        // Draw the velocity
-        cv::arrowedLine(
-            outputImage,
-            cv::Point(xImageSpace, yImageSpace),
-            cv::Point(xEndImageSpace, yEndImageSpace),
-            velocityHeat
-        );
+                // Draw the velocity
+                cv::arrowedLine(
+                    outputImage,
+                    cv::Point(xImageSpace, yImageSpace),
+                    cv::Point(xEndImageSpace, yEndImageSpace),
+                    velocityHeat
+                );
 
-        // Draw each grid point
-        const cv::Point gridPointImageSpace(
-            xOffset + nodes[2 * i] * xScale - xScale * minX,
-            yOffset + nodes[2* i + 1] * yScale - minY * yScale
-        );
-        cv::circle(
-            outputImage,
-            gridPointImageSpace,
-            0,
-            velocityHeat,
-            2
-        );
-    }
+                // Draw each grid point
+                const cv::Point gridPointImageSpace(
+                    xOffset + nodes[2 * i] * xScale - xScale * minX,
+                    yOffset + nodes[2* i + 1] * yScale - minY * yScale
+                );
+                cv::circle(
+                    outputImage,
+                    gridPointImageSpace,
+                    0,
+                    velocityHeat,
+                    2
+                );
+            }
+        }
+    );
 
-    for(int i = 0; i < grid.getElementsCount(); ++i) {
-        int idx[6];
-        Point2D nds[6];
-        grid.getElement(i, idx, reinterpret_cast<real*>(nds));
-        real nMinX = std::min(nds[2].x, std::min(nds[0].x, nds[1].x));
-        real nMaxX = std::max(nds[2].x, std::max(nds[0].x, nds[1].x));
-        real nMinY = std::min(nds[2].y, std::min(nds[0].y, nds[1].y));
-        real nMaxY = std::max(nds[2].y, std::max(nds[0].y, nds[1].y));
+    tbb::parallel_for(
+        tbb::blocked_range<size_t>(0, grid.getElementsCount()),
+        [&](const tbb::blocked_range<size_t>& r){
+            for(int i = r.begin(); i < r.end(); ++i) {
+                int idx[6];
+                Point2D nds[6];
+                grid.getElement(i, idx, reinterpret_cast<real*>(nds));
+                real nMinX = std::min(nds[2].x, std::min(nds[0].x, nds[1].x));
+                real nMaxX = std::max(nds[2].x, std::max(nds[0].x, nds[1].x));
+                real nMinY = std::min(nds[2].y, std::min(nds[0].y, nds[1].y));
+                real nMaxY = std::max(nds[2].y, std::max(nds[0].y, nds[1].y));
 
 
-        const real xImageSpace = nMinX * xScale + xScale * minX;
-        const real yImageSpace = nMinY * yScale + yScale * minY;
+                const real xImageSpace = nMinX * xScale + xScale * minX;
+                const real yImageSpace = nMinY * yScale + yScale * minY;
 
-        const real xEndImageSpace = nMaxX * xScale + xScale * minX;
-        const real yEndImageSpace = nMaxY * yScale + yScale * minY;
+                const real xEndImageSpace = nMaxX * xScale + xScale * minX;
+                const real yEndImageSpace = nMaxY * yScale + yScale * minY;
 
-        for(int row = xImageSpace; row < xEndImageSpace; ++row) {
-            for(int col = yImageSpace; col < yEndImageSpace; ++col) {
-                const real wx = (row + xScale * minX) / xScale;
-                const real wy = (col + yScale * minY) / yScale;
-                real xi, eta;
-                if(isPointInTriagle(Point2D(wx, wy), nds[0], nds[1], nds[2], xi, eta)) {
-                    real coeffs[3];
-                    P1::eval(xi, eta, coeffs);
-                    real val = coeffs[0] * pressure[idx[0]] + coeffs[1] * pressure[idx[1]] + coeffs[2] * pressure[idx[2]];
-                    auto color = heatmap(val, 0, maxPressure);
-                    cv::circle(
-                        outputImage,
-                        cv::Point(row, col),
-                        1,
-                        color,
-                        2
-                    );
+                for(int row = xImageSpace; row < xEndImageSpace; ++row) {
+                    for(int col = yImageSpace; col < yEndImageSpace; ++col) {
+                        const real wx = (row + xScale * minX) / xScale;
+                        const real wy = (col + yScale * minY) / yScale;
+                        real xi, eta;
+                        if(isPointInTriagle(Point2D(wx, wy), nds[0], nds[1], nds[2], xi, eta)) {
+                            real coeffs[3];
+                            P1::eval(xi, eta, coeffs);
+                            real val = coeffs[0] * pressure[idx[0]] + coeffs[1] * pressure[idx[1]] + coeffs[2] * pressure[idx[2]];
+                            auto color = heatmap(val, 0, maxPressure);
+                            cv::circle(
+                                outputImage,
+                                cv::Point(row, col),
+                                1,
+                                color,
+                                2
+                            );
+                        }
+                    }
                 }
             }
         }
-    }
+    );
 
     // Info string with the maximal velocity, and maximal velocity component in each direction.
     const std::string& info = "Max velocity length: " + std::to_string(maxLength) + ". Max u: " + std::to_string(maxU) + ". Max v: " + std::to_string(maxV);
