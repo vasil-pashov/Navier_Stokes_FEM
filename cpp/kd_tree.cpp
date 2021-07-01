@@ -57,7 +57,7 @@ namespace NSFem {
     }
 
     TriangleKDTree::TriangleKDTree(int maxDepth, int minLeafSize) :
-        maxDepth(std::min(maxDepth, 64)),
+        maxDepth(std::min(maxDepth, 29)),
         minLeafSize(minLeafSize)
     {}
     TriangleKDTree::TriangleKDTree() :
@@ -68,7 +68,7 @@ namespace NSFem {
         this->grid = grid;
         this->bbox = grid->getBBox();
         // The formula for depth is taken from pbrt
-        maxDepth = maxDepth > -1 ? maxDepth : std::min(64, (int)std::round(8 + 1.3f * std::log(grid->getElementsCount())));
+        maxDepth = maxDepth > -1 ? maxDepth : std::min(29, (int)std::round(8 + 1.3f * std::log(grid->getElementsCount())));
         assert(grid->getElementSize() == 6);
         std::vector<int> indices(grid->getElementsCount());
         std::iota(indices.begin(), indices.end(), 0);
