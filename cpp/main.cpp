@@ -10,6 +10,7 @@
 #include "expression.h"
 #include "cmd_line_parser.h"
 #include "tbb/task_scheduler_init.h"
+#include "tbb/global_control.h"
 
 enum SolverMethod {
     FEM,
@@ -122,8 +123,7 @@ int main(int nargs, char** cargs) {
             return tbb::task_scheduler_init::default_num_threads();
         }
     }();
-
-    tbb::task_scheduler_init init(numThreads);
+    tbb::global_control tbbMaxThreadsControl(tbb::global_control::max_allowed_parallelism, numThreads);
 
     NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
     error = assembler.init(

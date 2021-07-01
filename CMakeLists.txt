@@ -42,7 +42,6 @@ if(NOT DEFINED CMAKE_PREFIX_PATH)
 	set(CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR})
 endif()
 
-find_package(cpp_tm 0.2.0 REQUIRED CONFIG)
 find_package(nlohmann_json REQUIRED CONFIG)
 find_package(TBB REQUIRED CONFIG)
 
@@ -75,7 +74,7 @@ find_package(OpenCV REQUIRED CONFIG)
 
 target_include_directories(${PROJECT_NAME} PRIVATE include)
 target_include_directories(${PROJECT_NAME} PRIVATE sparse_matrix_math/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE cpp_tm::cpp_tm TBB::tbb)
+target_link_libraries(${PROJECT_NAME} PRIVATE TBB::tbb)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json opencv::opencv)
 target_compile_definitions(${PROJECT_NAME} PRIVATE -D_USE_MATH_DEFINES)
 

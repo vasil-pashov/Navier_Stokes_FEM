@@ -6,3 +6,7 @@ tbb/2020.3
 
 [generators]
 cmake_find_package_multi
+
+[imports]
+bin, *.dll -> ./
+lib, *.dylib* -> ./

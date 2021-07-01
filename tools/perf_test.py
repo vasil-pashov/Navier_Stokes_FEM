@@ -43,7 +43,7 @@ def processTimings(allFunctionTimes, totalRuns, showIndividualTimes):
         print("SD: {}".format(statistics.stdev(timings)))
         print("Min: {}".format(min(timings)))
         print("Max: {}".format(max(timings)))
-        if showIndividualTimes is not None:
+        if showIndividualTimes is True:
             print("Individual runs")
             for timing in timings:
                 print(timing)
@@ -68,8 +68,9 @@ def main():
             print("All timer data for the run")
             parseOutput(result.stdout, allFunctionTimes)
         except subprocess.CalledProcessError as ex:
-            print("Error: {} occured while trying to run running {}".format(
-                result.stderr, command))
+            print("Error: {} occured while trying to run {}. Output: {}".format(
+                ex.stderr, ex.cmd, ex.output))
+            print("Stdout: {}".format(ex.stdout))
             raise ex
     processTimings(allFunctionTimes, args.runs, args.individual_times)
 

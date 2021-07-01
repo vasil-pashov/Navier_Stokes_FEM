@@ -9,7 +9,6 @@
 #include <nlohmann/json.hpp>
 #include <opencv2/imgproc.hpp>
 #include "timer.h"
-#include <cpp_tm/cpp_tm.h>
 #include "tbb/blocked_range.h"
 #include "tbb/parallel_for.h"
 
