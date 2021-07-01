@@ -4,13 +4,22 @@ import subprocess
 import re
 import statistics
 
+
 def parseArgs():
-    parser = argparse.ArgumentParser(description='Measure the performace of fem_soler')
-    parser.add_argument("exePath", metavar="<Path to executable>", help="Path to fem_solver executable which is going to be meassured.")
-    parser.add_argument("sceneFile", metavar="<Path to scene>", help="Path to the fem_solver scene description.")
-    parser.add_argument("-r", "--runs", help="How many times to repeat the execution of the solver.", default=21, type=int)
-    parser.add_argument("-t", "--numThreads", help="Number of threads which the solver will use. Default - all threads available.", type=int)
+    parser = argparse.ArgumentParser(
+        description='Measure the performace of fem_soler')
+    parser.add_argument("exePath", metavar="<Path to executable>",
+                        help="Path to fem_solver executable which is going to be meassured.")
+    parser.add_argument("sceneFile", metavar="<Path to scene>",
+                        help="Path to the fem_solver scene description.")
+    parser.add_argument(
+        "-r", "--runs", help="How many times to repeat the execution of the solver.", default=21, type=int)
+    parser.add_argument(
+        "-t", "--numThreads", help="Number of threads which the solver will use. Default - all threads available.", type=int)
+    parser.add_argument("-it", "--individual-times", help="Snow the measurement for each run for each timer",
+                        dest="individual_times", action='store_true')
     return parser.parse_args()
+
 
 def parseOutput(otput, allFunctionTimes):
     pattern = re.compile("\[Scoped Timer\]\[(.*)\] ([-+]?\d*\.\d+|\d+)s")
@@ -19,19 +28,26 @@ def parseOutput(otput, allFunctionTimes):
         print("{}: {}".format(fn, time))
         allFunctionTimes[fn].append(float(time))
 
-def processTimings(allFunctionTimes, totalRuns):
+
+def processTimings(allFunctionTimes, totalRuns, showIndividualTimes):
     print("========================================================================")
     print("Stats for all timers")
     print("Number of runs: {}\n".format(totalRuns))
     for (fn, timings) in allFunctionTimes.items():
         if(len(timings) != totalRuns):
-            print("[WARNING] This function was run {} times. The requested amout was {}".format(len(timings), totalRuns))
+            print("[WARNING] This function was run {} times. The requested amout was {}".format(
+                len(timings), totalRuns))
         print("Function: {}".format(fn))
         print("Mean: {}".format(statistics.fmean(timings)))
         print("Median: {}".format(statistics.median_high(timings)))
         print("SD: {}".format(statistics.stdev(timings)))
         print("Min: {}".format(min(timings)))
         print("Max: {}".format(max(timings)))
+        if showIndividualTimes is True:
+            print("Individual runs")
+            for timing in timings:
+                print(timing)
+
 
 def main():
     args = parseArgs()
@@ -42,7 +58,8 @@ def main():
     allFunctionTimes = defaultdict(lambda: [])
     for i in range(0, args.runs):
         try:
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                command, capture_output=True, text=True, check=True)
             print("Run {} completed\n".format(i))
             print("===========================================\n")
             print("Run output\n")
@@ -51,9 +68,12 @@ def main():
             print("All timer data for the run")
             parseOutput(result.stdout, allFunctionTimes)
         except subprocess.CalledProcessError as ex:
-            print("Error: {} occured while trying to run running {}".format(result.stderr, command))
+            print("Error: {} occured while trying to run {}. Output: {}".format(
+                ex.stderr, ex.cmd, ex.output))
+            print("Stdout: {}".format(ex.stdout))
             raise ex
-    processTimings(allFunctionTimes, args.runs)
+    processTimings(allFunctionTimes, args.runs, args.individual_times)
+
 
 if __name__ == "__main__":
     main()

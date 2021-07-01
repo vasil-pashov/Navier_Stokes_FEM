@@ -9,6 +9,8 @@
 #include <nlohmann/json.hpp>
 #include <opencv2/imgproc.hpp>
 #include "timer.h"
+#include "tbb/blocked_range.h"
+#include "tbb/parallel_for.h"
 
 namespace NSFem {
 
@@ -1397,108 +1399,43 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     
     static_assert(VelocityShape::size == 6, "Only P2-P1 elements are supported");
     assert(grid.getElementSize() == VelocityShape::size && "Only P2-P1 elements are supported");
-    Point2D elementNodes[VelocityShape::size];
-    int elementIndexes[VelocityShape::size];
+    tbb::parallel_for(tbb::blocked_range<size_t>(0,velocityNodesCount),
+        [&](const tbb::blocked_range<size_t>& r) {
+        Point2D elementNodes[VelocityShape::size];
+        int elementIndexes[VelocityShape::size];
+        for(int i = r.begin(); i < r.end(); ++i) {
+            const Point2D position(velocityNodes[2*i], velocityNodes[2*i + 1]);
+            const Point2D velocity(uVelocity[i], vVelocity[i]);
+            const Point2D start = position - velocity * dt;
 
-    for(int i = 0; i < velocityNodesCount; ++i) {
-        const Point2D position(velocityNodes[2*i], velocityNodes[2*i + 1]);
-        const Point2D velocity(uVelocity[i], vVelocity[i]);
-        const Point2D start = position - velocity * dt;
-
-// #define BF_SEMI_LAGRANGIAN
-#ifdef BF_SEMI_LAGRANGIAN
-        const int elementsCount = grid.getElementsCount();
-        real uResult = 0, vResult = 0;
-        bool isPointInsideMesh = false;
-        for(int j = 0; j < elementsCount; ++j) {
-            grid.getElement(j, elementIndexes, reinterpret_cast<real*>(elementNodes));
-            // Check if start lies inside an element. This uses the barrycentric coordinates to check if a point lies in a triangle.
-            // Since we are in 2D we can describe point p as a linear combination of two vectors, we choose
-            // them to be AB and AC. We want (0, 0) in this new space to be the point A
-            // p = A + l1*AB + l2*AC
-            // |px|  = |Ax + l1(Bx - Ax) + l2(Cx - Ax)|
-            // |py|  = |Ay + l1(By - Ay) + l2(Cy - Ay)|
-            //
-            // |px - ax| = |Bx - Ax  Cx - Ax||l1|
-            // |py - ay| = |By - Ay  Cy - Ay||l2|
-            //
-            // |l1| = 1/D * |Cy - Ay  Ax - Cx||px - ax|
-            // |l2| = 1/D * |Ay - By  Bx - Ax||py - ay|
-            const Point2D AB = elementNodes[1] - elementNodes[0];
-            const Point2D AC = elementNodes[2] - elementNodes[0];
-            const Point2D AP = start - elementNodes[0];
-            const real D = (AB.x * AC.y) - (AB.y * AC.x);
-            assert(D != 0);
-            const int DSign = D > 0 ? 1 : -1;
-            // We do not want to divide by the determinant, so when we solve the system we get the result
-            // scaled by the determinant.
-            const real scaledBarry1 =  (AP.x * AC.y - AP.y * AC.x) * DSign;
-            if(scaledBarry1 < 0 || scaledBarry1 > D) {
-                continue;
-            }
-            const real scaledBarry2 = (AP.y * AB.x - AP.x * AB.y) * DSign;
-            if(scaledBarry2 < 0 || scaledBarry1 > D - scaledBarry2) {
-                continue;
-            }
-            
-            // When we reach this point we know that the point "start" is inside the triangle
-            // We need to scale down the barrycentroc coords and we'll get the point inside the triangle
-            const real dInv = 1 / std::abs(D);
-            const real xi = scaledBarry1 * dInv;
-            const real eta = scaledBarry2 * dInv;
-            
-            real interpolationCoefficients[VelocityShape::size];
-            VelocityShape::eval(xi, eta, interpolationCoefficients);
-            for(int k = 0; k < VelocityShape::size; ++k) {
-                uResult += interpolationCoefficients[k] * uVelocity[elementIndexes[k]];
-                vResult += interpolationCoefficients[k] * vVelocity[elementIndexes[k]];
-            }
-            isPointInsideMesh = true;
-            break;
-        }
-        if(!isPointInsideMesh) {
-            real minDistSq = std::numeric_limits<real>::infinity();
-            for(int j = 0; j < velocityNodesCount; ++j) {
-                const Point2D meshPoint(velocityNodes[2 * j], velocityNodes[2 * j + 1]);
-                const real currentDistSq = start.distToSq(meshPoint);
-                if(currentDistSq < minDistSq) {
-                    minDistSq = currentDistSq;
-                    uResult = uVelocity[j];
-                    vResult = vVelocity[j];
+            // If start is inside some element xi and eta will be the barrycentric coordinates
+            // of start inside that element.
+            real xi, eta;
+            // If start does not lie in any triangle this will be the index of the nearest node to start
+            int nearestNeighbour;
+            const int element = kdTree.findElement(start, xi, eta, nearestNeighbour);
+            if(element > -1) {
+                // Start point lies in an element, interpolate it by using the shape functions.
+                // This is possible because xi and eta do not change when the element is transformed
+                // to the unit element where the shape functions are defined. 
+                real uResult = 0, vResult = 0;
+                grid.getElement(element, elementIndexes, reinterpret_cast<real*>(elementNodes));
+                real interpolationCoefficients[VelocityShape::size];
+                VelocityShape::eval(xi, eta, interpolationCoefficients);
+                for(int k = 0; k < VelocityShape::size; ++k) {
+                    uResult += interpolationCoefficients[k] * uVelocity[elementIndexes[k]];
+                    vResult += interpolationCoefficients[k] * vVelocity[elementIndexes[k]];
                 }
+                uVelocityOut[i] = uResult;
+                vVelocityOut[i] = vResult;
+            } else {
+                // Start point does not lie in any element (probably it's outside the mesh)
+                // Use the closest point in the mesh to approximate the velocity
+                uVelocityOut[i] = uVelocity[nearestNeighbour];
+                vVelocityOut[i] = vVelocity[nearestNeighbour];
             }
         }
-        uVelocityOut[i] = uResult;
-        vVelocityOut[i] = vResult;
-#else
-        // If start is inside some element xi and eta will be the barrycentric coordinates
-        // of start inside that element.
-        real xi, eta;
-        // If start does not lie in any triangle this will be the index of the nearest node to start
-        int nearestNeighbour;
-        const int element = kdTree.findElement(start, xi, eta, nearestNeighbour);
-        if(element > -1) {
-            // Start point lies in an element, interpolate it by using the shape functions.
-            // This is possible because xi and eta do not change when the element is transformed
-            // to the unit element where the shape functions are defined. 
-            real uResult = 0, vResult = 0;
-            grid.getElement(element, elementIndexes, reinterpret_cast<real*>(elementNodes));
-            real interpolationCoefficients[VelocityShape::size];
-            VelocityShape::eval(xi, eta, interpolationCoefficients);
-            for(int k = 0; k < VelocityShape::size; ++k) {
-                uResult += interpolationCoefficients[k] * uVelocity[elementIndexes[k]];
-                vResult += interpolationCoefficients[k] * vVelocity[elementIndexes[k]];
-            }
-            uVelocityOut[i] = uResult;
-            vVelocityOut[i] = vResult;
-        } else {
-            // Start point does not lie in any element (probably it's outside the mesh)
-            // Use the closest point in the mesh to approximate the velocity
-            uVelocityOut[i] = uVelocity[nearestNeighbour];
-            vVelocityOut[i] = vVelocity[nearestNeighbour];
-        }
-    }
-#endif
+    });
 }
 
 }

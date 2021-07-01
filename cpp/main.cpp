@@ -9,6 +9,8 @@
 #include "error_code.h"
 #include "expression.h"
 #include "cmd_line_parser.h"
+#include "tbb/task_scheduler_init.h"
+#include "tbb/global_control.h"
 
 enum SolverMethod {
     FEM,
@@ -113,6 +115,16 @@ int main(int nargs, char** cargs) {
         argParse.print(stderr);
         return 1;
     }
+    int numThreads = [&]() -> int {
+        const int* threads = argParse.getIntVal("numThreads");
+        if(threads != nullptr) {
+            return *threads;
+        } else {
+            return tbb::task_scheduler_init::default_num_threads();
+        }
+    }();
+    tbb::global_control tbbMaxThreadsControl(tbb::global_control::max_allowed_parallelism, numThreads);
+
     NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
     error = assembler.init(
         argParse.getStringVal("sceneFile"),
