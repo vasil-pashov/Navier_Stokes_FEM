@@ -11,6 +11,7 @@
 #include "timer.h"
 #include "tbb/blocked_range.h"
 #include "tbb/parallel_for.h"
+#include "tbb/task_group.h"
 
 namespace NSFem {
 
@@ -277,6 +278,10 @@ public:
     void setOutputDir(std::string outputDir);
     void setOutputDir(std::string&& outputDir);
 private:
+    enum class VelocityChannel {
+        U,
+        V
+    };
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
 
@@ -1109,7 +1114,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     SMM::Vector<real> tmp(nodesCount * 2, 0);
 
     std::unordered_map<char, float> pressureVars;
-    std::unordered_map<char, float> velocityVars;
 
     exportSolution(0);
 
@@ -1126,6 +1130,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     }
 
     const real eps = 1e-8;
+
+
+    tbb::task_group g;
 
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
@@ -1185,97 +1192,90 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
-        // Combine the tentative velocity and the pressure to find the actual velocity. The system is:
-        // velocityMassMatrix.currentVelocitySolution = velocityMassMatrix.tentative - dt * pressureDivergenceMatrix.currentPressureSolution
-        // Note that on the right hand side the tentative velocity is multiplied by the velocity mass matrix.
-        // velocityMassMatrix.y = - dt * pressureDivergenceMatrix.currentPressureSolution
-        // y = currentVelocitySolution - tentative
-        // currentVelocitySolution = y + tentative
+        // After the pressure is found, we must use it to find the "tentative" velocity.
+        // First find the right hand side of the tentative velocity.
         pressureDivergenceMatrix.rMult(currentPressureSolution, velocityRhs);
-
-        // Solve for the u component
-        solveStatus = SMM::ConjugateGradient(
-            velocityMassMatrix,
-            static_cast<real*>(velocityRhs),
-            static_cast<real*>(tmp),
-            static_cast<real*>(currentVelocitySolution),
-            -1,
-            eps,
-            velocityMassIC0
-        );
-        assert(solveStatus == SMM::SolverStatus::SUCCESS);
-        for(int i = 0; i < nodesCount; ++i) {
-            currentVelocitySolution[i] += tmp[i];
-        }
-
-        // Solve for the v component
-        solveStatus = SMM::ConjugateGradient(
-            velocityMassMatrix,
-            velocityRhs + nodesCount,
-            tmp + nodesCount,
-            currentVelocitySolution + nodesCount,
-            -1,
-            eps,
-            velocityMassIC0
-        );
-        assert(solveStatus == SMM::SolverStatus::SUCCESS);
-        for(int i = 0; i < nodesCount; ++i) {
-            currentVelocitySolution[i + nodesCount] += tmp[i + nodesCount];
-        }
-
 
 // ==================================================================================
 // ============================= DIFFUSION SOLVE ====================================
 // ==================================================================================
-        velocityMassMatrix.rMult(currentVelocitySolution, velocityRhs);
-        velocityMassMatrix.rMult(currentVelocitySolution + nodesCount, velocityRhs + nodesCount);
+        // U and v components of the tentative velocity and the u and v components of the diffused velocity are independent.
+        // This function can find one final velocity component. It first finds the tentative velocity and then perfrms the diffusion.
+        auto diffusionSolve = [&](real* currentVelocitySolution, real* velocityRhs, real* advectedVelocity, VelocityChannel ch) {
+            
+            // Find the tentative velocity 
+            SMM::SolverStatus status = SMM::ConjugateGradient(
+                velocityMassMatrix,
+                static_cast<real*>(velocityRhs),
+                static_cast<real*>(advectedVelocity),
+                static_cast<real*>(currentVelocitySolution),
+                -1,
+                eps,
+                velocityMassIC0
+            );
+            assert(status == SMM::SolverStatus::SUCCESS);
 
-        // Now impose the Dirichlet Boundary Conditions
-        FemGrid2D::VelocityDirichletConstIt velocityDrichiletIt = grid.getVelocityDirichletBegin();
-        const FemGrid2D::VelocityDirichletConstIt velocityDrichiletEnd = grid.getVelocityDirichletEnd();
-        for(;velocityDrichiletIt != velocityDrichiletEnd; ++velocityDrichiletIt) {
-            const FemGrid2D::VelocityDirichlet& boundary = *velocityDrichiletIt;
-            for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
-                const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
-                const real x = grid.getNodesBuffer()[nodeIndex * 2];
-                const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
-                velocityVars['x'] = x;
-                velocityVars['y'] = y;
-                float uBoundary = 0, vBoundary = 0;
-                boundary.eval(&velocityVars, uBoundary, vBoundary);
-                velocityRhs[nodeIndex] = uBoundary;
-                velocityRhs[nodeIndex + nodesCount] = vBoundary;
-                SMM::CSRMatrix<real>::ConstRowIterator it = velocityDirichletWeights.rowBegin(nodeIndex);
-                const SMM::CSRMatrix<real>::ConstRowIterator end = velocityDirichletWeights.rowEnd(nodeIndex);
-                while(it != end) {
-                    velocityRhs[it->getCol()] -= it->getValue() * uBoundary;
-                    velocityRhs[it->getCol() + nodesCount] -= it->getValue() * vBoundary;;
-                    ++it;
+            for(int i = 0; i < nodesCount; ++i) {
+                currentVelocitySolution[i] += advectedVelocity[i];
+            }
+
+            std::unordered_map<char, float> velocityVars;
+            // Compute the right hand side for the diffused channel
+            velocityMassMatrix.rMult(currentVelocitySolution, velocityRhs);
+            // Take in to accound Dirchled condition and add them to the right hand side for the diffused channel
+            FemGrid2D::VelocityDirichletConstIt velocityDrichiletIt = grid.getVelocityDirichletBegin();
+            const FemGrid2D::VelocityDirichletConstIt velocityDrichiletEnd = grid.getVelocityDirichletEnd();
+            for(;velocityDrichiletIt != velocityDrichiletEnd; ++velocityDrichiletIt) {
+                const FemGrid2D::VelocityDirichlet& boundary = *velocityDrichiletIt;
+                for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+                    const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+                    const real x = grid.getNodesBuffer()[nodeIndex * 2];
+                    const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+                    velocityVars['x'] = x;
+                    velocityVars['y'] = y;
+                    float uBoundary = 0, vBoundary = 0;
+                    boundary.eval(&velocityVars, uBoundary, vBoundary);
+                    const float boundaryValue = ch == VelocityChannel::U ? uBoundary : vBoundary;
+                    velocityRhs[nodeIndex] = boundaryValue;
+                    SMM::CSRMatrix<real>::ConstRowIterator it = velocityDirichletWeights.rowBegin(nodeIndex);
+                    const SMM::CSRMatrix<real>::ConstRowIterator end = velocityDirichletWeights.rowEnd(nodeIndex);
+                    while(it != end) {
+                        velocityRhs[it->getCol()] -= it->getValue() * boundaryValue;
+                        ++it;
+                    }
                 }
             }
-        }
 
-        solveStatus = SMM::ConjugateGradient(
-            diffusionMatrix,
-            static_cast<real*>(velocityRhs),
-            static_cast<real*>(currentVelocitySolution),
-            static_cast<real*>(currentVelocitySolution),
-            -1,
-            eps,
-            diffusionIC0
-        );
-        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+            // Find the final velocity at the current time step
+            status = SMM::ConjugateGradient(
+                diffusionMatrix,
+                static_cast<real*>(velocityRhs),
+                static_cast<real*>(currentVelocitySolution),
+                static_cast<real*>(currentVelocitySolution),
+                -1,
+                eps,
+                diffusionIC0
+            );
+            assert(status == SMM::SolverStatus::SUCCESS);
+        };
 
-        solveStatus = SMM::ConjugateGradient(
-            diffusionMatrix,
-            velocityRhs + nodesCount,
-            currentVelocitySolution + nodesCount,
-            currentVelocitySolution + nodesCount,
-            -1,
-            eps,
-            diffusionIC0
-        );
-        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+        g.run([&](){
+            diffusionSolve(
+                currentVelocitySolution,
+                velocityRhs,
+                tmp,
+                VelocityChannel::U
+            );
+        });
+        g.run_and_wait([&](){
+            diffusionSolve(
+                currentVelocitySolution + nodesCount,
+                velocityRhs + nodesCount,
+                tmp + nodesCount,
+                VelocityChannel::V
+            );
+        });
+
         exportSolution(timeStep);
 
     }
