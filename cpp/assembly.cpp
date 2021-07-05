@@ -120,56 +120,52 @@ void drawVectorPlot(
     real maxU = 0;
     real maxV = 0;
 
-    tbb::parallel_for(tbb::blocked_range<size_t>(0,numNodes),
-        [&](const tbb::blocked_range<size_t>& r) {
-            for(int i = r.begin(); i < r.end(); ++i) {
-                real maxU = uVec[0];
-                real maxV = vVec[0];
-                const real length = sqrt(uVec[i] * uVec[i] + vVec[i] * vVec[i]);
-                const real lengthScaled = maxLength != 0 ? length / maxLength : 0;
-                assert(lengthScaled <= 1);
-                const Point2D& node = grid.getNode(i);
-                Point2D direction = Point2D(uVec[i], vVec[i]) * (length > 0 ? 1.0 / maxLength : 0);
-                const Point2D& end = node + direction * (maxArrowLengthInPixels / xScale);
+    for(int i = 0; i < numNodes; ++i) {
+        real maxU = uVec[0];
+        real maxV = vVec[0];
+        const real length = sqrt(uVec[i] * uVec[i] + vVec[i] * vVec[i]);
+        const real lengthScaled = maxLength != 0 ? length / maxLength : 0;
+        assert(lengthScaled <= 1);
+        const Point2D& node = grid.getNode(i);
+        Point2D direction = Point2D(uVec[i], vVec[i]) * (length > 0 ? 1.0 / maxLength : 0);
+        const Point2D& end = node + direction * (maxArrowLengthInPixels / xScale);
 
-                const real xImageSpace = xOffset + node.x * xScale - xScale * minX;
-                const real yImageSpace = yOffset + node.y * yScale - yScale * minY;
+        const real xImageSpace = xOffset + node.x * xScale - xScale * minX;
+        const real yImageSpace = yOffset + node.y * yScale - yScale * minY;
 
-                const real xEndImageSpace = xOffset + end.x * xScale - xScale * minX;
-                const real yEndImageSpace = yOffset + end.y * yScale  -yScale * minY;
+        const real xEndImageSpace = xOffset + end.x * xScale - xScale * minX;
+        const real yEndImageSpace = yOffset + end.y * yScale  -yScale * minY;
 
-                maxU = std::max(maxU, (real)uVec[i]);
-                maxV = std::max(maxV, (real)vVec[i]);
+        maxU = std::max(maxU, (real)uVec[i]);
+        maxV = std::max(maxV, (real)vVec[i]);
 
-                const cv::Scalar velocityHeat = heatmap(lengthScaled, 0, 1);
+        const cv::Scalar velocityHeat = heatmap(lengthScaled, 0, 1);
 
-                // Draw the velocity
-                cv::arrowedLine(
-                    outputImage,
-                    cv::Point(xImageSpace, yImageSpace),
-                    cv::Point(xEndImageSpace, yEndImageSpace),
-                    velocityHeat
-                );
+        // Draw the velocity
+        cv::arrowedLine(
+            outputImage,
+            cv::Point(xImageSpace, yImageSpace),
+            cv::Point(xEndImageSpace, yEndImageSpace),
+            velocityHeat
+        );
 
-                // Draw each grid point
-                const cv::Point gridPointImageSpace(
-                    xOffset + nodes[2 * i] * xScale - xScale * minX,
-                    yOffset + nodes[2* i + 1] * yScale - minY * yScale
-                );
-                cv::circle(
-                    outputImage,
-                    gridPointImageSpace,
-                    0,
-                    velocityHeat,
-                    2
-                );
-            }
-        }
-    );
+        // Draw each grid point
+        const cv::Point gridPointImageSpace(
+            xOffset + nodes[2 * i] * xScale - xScale * minX,
+            yOffset + nodes[2* i + 1] * yScale - minY * yScale
+        );
+        cv::circle(
+            outputImage,
+            gridPointImageSpace,
+            0,
+            velocityHeat,
+            2
+        );
+    }
 
     tbb::parallel_for(
-        tbb::blocked_range<size_t>(0, grid.getElementsCount()),
-        [&](const tbb::blocked_range<size_t>& r){
+        tbb::blocked_range<int>(0, grid.getElementsCount()),
+        [&](const tbb::blocked_range<int>& r){
             for(int i = r.begin(); i < r.end(); ++i) {
                 int idx[6];
                 Point2D nds[6];
@@ -199,7 +195,7 @@ void drawVectorPlot(
                             cv::circle(
                                 outputImage,
                                 cv::Point(row, col),
-                                1,
+                                0,
                                 color,
                                 2
                             );
