@@ -1,8 +1,10 @@
-cmake_minimum_required(VERSION 3.19.0)
+cmake_minimum_required(VERSION 3.20.0)
+
 project(
 	NSFemSolver
 	VERSION 0.1.0
-	DESCRIPTION "Finite element method solver for the Navier-Stokes equations." 
+	DESCRIPTION "Finite element method solver for the Navier-Stokes equations."
+	LANGUAGES CXX CUDA
 )
 
 set(CMAKE_CXX_STANDARD 17)
@@ -149,3 +151,15 @@ target_precompile_headers(${PROJECT_NAME}
 		<opencv2/imgproc.hpp>
 		<opencv2/imgcodecs.hpp>
 )
+
+add_library(gpu_sim OBJECT gpu/advection.cu)
+set_target_properties(gpu_sim
+    PROPERTIES
+		CUDA_SEPARABLE_COMPILATION ON
+		CUDA_PTX_COMPILATION ON)
+add_dependencies(${PROJECT_NAME} gpu_sim)
+
+add_custom_command(
+	TARGET ${PROJECT_NAME} POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/ptx
+	COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_OBJECTS:gpu_sim>" ${PROJECT_BINARY_DIR}/ptx)
