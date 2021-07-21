@@ -55,6 +55,7 @@ set(CPP
 	cpp/assembly.cpp
 	cpp/kd_tree.cpp
 	cpp/cmd_line_parser.cpp
+	cpp/gpu_context.cpp
 )
 
 set(HEADERS
@@ -67,17 +68,19 @@ set(HEADERS
 	include/timer.h
 	include/cmd_line_parser.h
 	include/small_vector.h
+	include/gpu_context.h
 	sparse_matrix_math/include/sparse_matrix_math.h
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
 
 find_package(OpenCV REQUIRED CONFIG)
+find_package(CUDAToolkit REQUIRED)
 
 target_include_directories(${PROJECT_NAME} PRIVATE include)
 target_include_directories(${PROJECT_NAME} PRIVATE sparse_matrix_math/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE TBB::tbb)
-target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json opencv::opencv)
+target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json opencv::opencv CUDA::cuda_driver)
 target_compile_definitions(${PROJECT_NAME} PRIVATE -D_USE_MATH_DEFINES)
 
 if(NOT MSVC)
@@ -155,8 +158,8 @@ target_precompile_headers(${PROJECT_NAME}
 add_library(gpu_sim OBJECT gpu/advection.cu)
 set_target_properties(gpu_sim
     PROPERTIES
-		CUDA_SEPARABLE_COMPILATION ON
-		CUDA_PTX_COMPILATION ON)
+		CUDA_PTX_COMPILATION ON
+		CUDA_ARCHITECTURES "20")
 add_dependencies(${PROJECT_NAME} gpu_sim)
 
 add_custom_command(
