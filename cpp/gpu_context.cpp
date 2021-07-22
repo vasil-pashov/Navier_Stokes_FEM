@@ -317,4 +317,48 @@ void GPUDevice::printDeviceInfo() const {
     CUDAUTILS_PRINT_DEVICE_ATTRIBUTE(CU_DEVICE_ATTRIBUTE_COMPUTE_PREEMPTION_SUPPORTED, handle); // = 90,      /**< Device supports compute preemption. */
     CUDAUTILS_PRINT_DEVICE_ATTRIBUTE(CU_DEVICE_ATTRIBUTE_CAN_USE_HOST_POINTER_FOR_REGISTERED_MEM, handle); // = 91, /**< Device can access host registered memory at the same virtual address as the CPU */
 }
+
+GPUBuffer::GPUBuffer(int64_t byteSize) :
+    byteSize(byteSize)
+{
+    EC::ErrorCode ec = CHECK_CUDA_ERROR(cuMemAlloc(&handle, byteSize));
+    if(ec.hasError()) {
+        fprintf(stderr, "%s\n", ec.getMessage());
+        handle = 0;
+        byteSize = 0;
+    }
+}
+
+GPUBuffer::~GPUBuffer() {
+    freeMem();
+}
+
+EC::ErrorCode GPUBuffer::init(int64_t byteSize) {
+    if(handle != 0) {
+        const EC::ErrorCode ec = freeMem();
+        if(ec.hasError()) {
+            return ec;
+        }
+    }
+    RETURN_ON_CUDA_ERROR(cuMemAlloc(&handle, byteSize));
+    return EC::ErrorCode();
+}
+
+EC::ErrorCode GPUBuffer::uploadToBuffer(const void* src, const int64_t uploadByteSize, const int64_t destOffset) {
+    assert(destOffset + uploadByteSize < byteSize && "Trying to use more space than there is allocated");
+    RETURN_ON_CUDA_ERROR(cuMemcpyHtoD((CUdeviceptr)((char*)handle + destOffset), src, uploadByteSize));
+    return EC::ErrorCode();
+}
+
+EC::ErrorCode GPUBuffer::uploadToBuffer(const void* src, const int64_t uploadByteSize) {
+    return uploadToBuffer(src, uploadByteSize, 0);
+}
+
+EC::ErrorCode GPUBuffer::freeMem() {
+    EC::ErrorCode ec = CHECK_CUDA_ERROR(cuMemFree(handle));
+    handle = 0;
+    byteSize = 0;
+    return ec;
+}
+
 }

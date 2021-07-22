@@ -76,4 +76,75 @@ public:
 private:
     std::vector<GPUDevice> devices;
 };
+
+/// Simple class to wrap around a buffer which lives on the GPU
+/// It has functionalities to allocate, free, and upload data to the GPU
+class GPUBuffer {
+    GPUBuffer() :
+        handle(0),
+        byteSize(0)
+    { }
+
+    /// Initialize the GPU memory by allocating byteSize bytes. It may fail silently
+    /// if so byteSize and handle will be set to the same values as the default constructr.
+    explicit GPUBuffer(int64_t byteSize);
+        
+    GPUBuffer(const GPUBuffer&) = delete;
+    GPUBuffer& operator=(const GPUBuffer&) = delete;
+    GPUBuffer(GPUBuffer&& other) :
+        handle(other.handle),
+        byteSize(other.byteSize)
+    {
+        other.handle = 0;
+        other.byteSize = 0;
+    }
+    GPUBuffer& operator=(GPUBuffer&& other) {
+        handle = other.handle;
+        byteSize = other.byteSize;
+        other.handle = 0;
+        other.byteSize = 0;
+        return *this;
+    }
+
+    /// Destructor. Will free all GPU memory allocated by the buffe.
+    ~GPUBuffer();
+
+    /// Initialize the GPU memory by allocating byteSize bytes. If the buffer was already allocated
+    /// it will first deallocated the old memory.
+    /// @param byteSize Number of bytes which will be allocated on the GPU
+    /// @returns Status of operation.
+    EC::ErrorCode init(int64_t byteSize);
+
+    /// Copy uploadByteSize bytes for src to the GPU starting destOffset bytes into the GPU memory
+    /// @param src CPU buffer which will be uploaded to the GPU
+    /// @param uploadByteSize How many bytes from src will be uploaded to the GPU
+    /// @param destOffset Offset into the GPU memory where src will be copied
+    /// @returns Status of the operation.
+    EC::ErrorCode uploadToBuffer(const void* src, const int64_t uploadByteSize, const int64_t destOffset);
+
+    /// Copy uploadByteSize bytes from src to the GPU starting from the begining of the GPU memory
+    /// @param src CPU buffer which will be uploaded to the GPU
+    /// @param uploadByteSize How many bytes from src will be uploaded to the GPU
+    /// @returns Status of the task.
+    EC::ErrorCode uploadToBuffer(const void* src, const int64_t uploadByteSize);
+
+    /// Deallocate all GPU memory allocated by the buffer and set its size to 0
+    EC::ErrorCode freeMem();
+
+    /// Get an implementation specific handle which represents the buffer on the GPU
+    CUdeviceptr getHandle() const {
+        return handle;
+    }
+
+    /// Get the total memory allocated for this buffer on the GPU in bytes.
+    int64_t getByteSize() const {
+        return byteSize;
+    }
+private:
+    /// CUDA handle representing the buffer. If it's 0 the buffer is not allocated
+    CUdeviceptr handle;
+    /// Size in bytes of the total memory allocated on the GPU for this buffer
+    int64_t byteSize;
+};
+
 } // namespace GPU

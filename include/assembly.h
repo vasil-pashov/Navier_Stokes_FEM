@@ -1399,8 +1399,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     
     static_assert(VelocityShape::size == 6, "Only P2-P1 elements are supported");
     assert(grid.getElementSize() == VelocityShape::size && "Only P2-P1 elements are supported");
-    tbb::parallel_for(tbb::blocked_range<size_t>(0,velocityNodesCount),
-        [&](const tbb::blocked_range<size_t>& r) {
+    tbb::parallel_for(tbb::blocked_range<int>(0,velocityNodesCount),
+        [&](const tbb::blocked_range<int>& r) {
         Point2D elementNodes[VelocityShape::size];
         int elementIndexes[VelocityShape::size];
         for(int i = r.begin(); i < r.end(); ++i) {
