@@ -112,7 +112,8 @@ EC::ErrorCode GPUDevice::init(int index) {
 }
 
 EC::ErrorCode GPUDevice::addModule(const char* src, const char* kernelNames[], int kernelCount, CUmodule* out) {
-    CUjit_option compilerOptions[] = {
+    const int complierOptionsCount = 4;
+    CUjit_option compilerOptions[complierOptionsCount] = {
         CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES,
         CU_JIT_INFO_LOG_BUFFER,
         CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
@@ -121,20 +122,16 @@ EC::ErrorCode GPUDevice::addModule(const char* src, const char* kernelNames[], i
     const int logBufferSize = 4096;
     char jitLogBuffer[logBufferSize];
     char jitErrorBuffer[logBufferSize];
-    void* compilerOptionsValue[] = {
+    void* compilerOptionsValue[complierOptionsCount] = {
         (void*)logBufferSize,
         (void*)jitLogBuffer,
         (void*)logBufferSize,
         (void*)jitErrorBuffer
     };
-    static_assert(
-        std::size(compilerOptions) == std::size(compilerOptionsValue),
-        "There must be one-to-one matching between compiler options and values"
-    );
 
     ScopedGPUContext ctxGuard(context);
     CUmodule module;
-    CUresult res = cuModuleLoadDataEx(&module, src, std::size(compilerOptions), compilerOptions, compilerOptionsValue);
+    CUresult res = cuModuleLoadDataEx(&module, src, complierOptionsCount, compilerOptions, compilerOptionsValue);
     if(res != CUDA_SUCCESS) {
         const char* errorName = nullptr;
         cuGetErrorName(res, &errorName);
@@ -153,14 +150,14 @@ EC::ErrorCode GPUDevice::addModule(const char* src, const char* kernelNames[], i
     if(out) {
         *out = module;
     }
-    for(int i = 0; i < kernelCount; ++i) {
+    /*for(int i = 0; i < kernelCount; ++i) {
         CUfunction kernel = nullptr;
         RETURN_ON_CUDA_ERROR(cuModuleGetFunction(&kernel, module, kernelNames[i]));
         const auto insertRes = kernels.insert_or_assign(kernelNames[i], kernel);
         if(insertRes.second == false) {
             return EC::ErrorCode(-1, "Kernel: %s already exists", kernelNames[i]);
         }
-    }
+    }*/
     return EC::ErrorCode();
 }
 
@@ -213,7 +210,7 @@ EC::ErrorCode GPUDeviceManager::addModuleFromFile(const char* filepath, const ch
     file.seekg(0, std::ios::beg);
     std::string data;
     data.resize(fileSize);
-    file.read(data.data(), fileSize);
+    file.read(&data[0], fileSize);
     for(GPUDevice& device : devices) {
         const EC::ErrorCode errorCode = device.addModule(data.c_str(), kernelNames, kernelCount);
         if(errorCode.hasError()) {
