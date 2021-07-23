@@ -67,7 +67,7 @@ inline EC::ErrorCode checkCudaError(CUresult code, const char* file, const char*
                 line
             );
         }
-        assert(false && result.getMessage());
+        assert(false);
         return result;
     }
     return EC::ErrorCode();
@@ -111,7 +111,7 @@ EC::ErrorCode GPUDevice::init(int index) {
     return EC::ErrorCode();
 }
 
-EC::ErrorCode GPUDevice::addModule(const char* src, char** kernelNames, int kernelCount, CUmodule* out) {
+EC::ErrorCode GPUDevice::addModule(const char* src, const char* kernelNames[], int kernelCount, CUmodule* out) {
     CUjit_option compilerOptions[] = {
         CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES,
         CU_JIT_INFO_LOG_BUFFER,
@@ -136,14 +136,18 @@ EC::ErrorCode GPUDevice::addModule(const char* src, char** kernelNames, int kern
     CUmodule module;
     CUresult res = cuModuleLoadDataEx(&module, src, std::size(compilerOptions), compilerOptions, compilerOptionsValue);
     if(res != CUDA_SUCCESS) {
-        assert(false && "Cuda module failed to compile/link");
-        return EC::ErrorCode(
+        const char* errorName = nullptr;
+        cuGetErrorName(res, &errorName);
+        const EC::ErrorCode err = EC::ErrorCode(
             res,
-            "CUDA error: %d. CUDA module failed to compile.\nInfo log: %s.\nError log: %s",
+            "CUDA error: %d (%s). CUDA module failed to compile.\nInfo log: %s.\nError log: %s",
             res,
+            errorName,
             jitLogBuffer,
             jitErrorBuffer
         );
+        assert(false && "Cuda module failed to compile/link");
+        return err;
     }
     modules.push_back(module);
     if(out) {
@@ -200,16 +204,16 @@ EC::ErrorCode GPUDeviceManager::init() {
     return EC::ErrorCode();
 }
 
-EC::ErrorCode GPUDeviceManager::addModuleFromFile(const char* filepath, char** kernelNames, int kernelCount) {
+EC::ErrorCode GPUDeviceManager::addModuleFromFile(const char* filepath, const char* kernelNames[], int kernelCount) {
     std::ifstream file(filepath, std::ifstream::ate | std::ifstream::binary);
     if(file.fail()) {
         return EC::ErrorCode(errno, "%d: %s. Cannot open file: %s.", errno, strerror(errno), filepath);
     }
     const int64_t fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
     std::string data;
     data.resize(fileSize);
     file.read(data.data(), fileSize);
-
     for(GPUDevice& device : devices) {
         const EC::ErrorCode errorCode = device.addModule(data.c_str(), kernelNames, kernelCount);
         if(errorCode.hasError()) {
@@ -344,15 +348,29 @@ EC::ErrorCode GPUBuffer::init(int64_t byteSize) {
     return EC::ErrorCode();
 }
 
-EC::ErrorCode GPUBuffer::uploadToBuffer(const void* src, const int64_t uploadByteSize, const int64_t destOffset) {
+EC::ErrorCode GPUBuffer::uploadBuffer(const void* src, const int64_t uploadByteSize, const int64_t destOffset) {
     assert(destOffset + uploadByteSize < byteSize && "Trying to use more space than there is allocated");
     RETURN_ON_CUDA_ERROR(cuMemcpyHtoD((CUdeviceptr)((char*)handle + destOffset), src, uploadByteSize));
     return EC::ErrorCode();
 }
 
-EC::ErrorCode GPUBuffer::uploadToBuffer(const void* src, const int64_t uploadByteSize) {
-    return uploadToBuffer(src, uploadByteSize, 0);
+EC::ErrorCode GPUBuffer::uploadBuffer(const void* src, const int64_t uploadByteSize) {
+    return uploadBuffer(src, uploadByteSize, 0);
 }
+
+EC::ErrorCode GPUBuffer::downloadBuffer(void* src) {
+    return downloadBuffer(src, byteSize, 0);
+}
+
+EC::ErrorCode GPUBuffer::downloadBuffer(void* src, int64_t donwloadByteSize) {
+    return downloadBuffer(src, donwloadByteSize, 0);
+}
+
+EC::ErrorCode GPUBuffer::downloadBuffer(void* src, int64_t downloadByteSize, const int64_t srcOffset) {
+    RETURN_ON_CUDA_ERROR(cuMemcpyDtoH(src, (CUdeviceptr)((char*)handle + srcOffset), downloadByteSize));
+    return EC::ErrorCode();
+}
+
 
 EC::ErrorCode GPUBuffer::freeMem() {
     EC::ErrorCode ec = CHECK_CUDA_ERROR(cuMemFree(handle));

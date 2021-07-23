@@ -8,6 +8,8 @@ namespace EC {
     class ErrorCode;
 }
 
+namespace GPU {
+
 struct Dim3 {
     explicit Dim3(int x) : Dim3(x, 1, 1)
     {
@@ -49,13 +51,13 @@ struct KernelLaunchParams {
     int sharedMemSize;
 };
 
-namespace GPU {
+
 class GPUDevice {
 public:
     friend class GPUDeviceManager;
     GPUDevice() = default;
     EC::ErrorCode init(int index);
-    EC::ErrorCode addModule(const char* moduleSource, char** kernelNames, int kernelCount, CUmodule* out = nullptr);
+    EC::ErrorCode addModule(const char* moduleSource, const char* kernelNames[], int kernelCount, CUmodule* out = nullptr);
     EC::ErrorCode callKernelSync(const std::string& name, const KernelLaunchParams& params);
     ~GPUDevice();
 private:
@@ -72,7 +74,10 @@ public:
     GPUDeviceManager(const GPUDeviceManager&) = delete;
     GPUDeviceManager& operator=(const GPUDeviceManager&) = delete;
     EC::ErrorCode init();
-    EC::ErrorCode addModuleFromFile(const char* filePath, char** kernelNames, int kernelCount);
+    EC::ErrorCode addModuleFromFile(const char* filePath, const char* kernelNames[], int kernelCount);
+    GPUDevice& getDevice(int index) {
+        return devices[index];
+    }
 private:
     std::vector<GPUDevice> devices;
 };
@@ -80,6 +85,7 @@ private:
 /// Simple class to wrap around a buffer which lives on the GPU
 /// It has functionalities to allocate, free, and upload data to the GPU
 class GPUBuffer {
+public:
     GPUBuffer() :
         handle(0),
         byteSize(0)
@@ -120,13 +126,25 @@ class GPUBuffer {
     /// @param uploadByteSize How many bytes from src will be uploaded to the GPU
     /// @param destOffset Offset into the GPU memory where src will be copied
     /// @returns Status of the operation.
-    EC::ErrorCode uploadToBuffer(const void* src, const int64_t uploadByteSize, const int64_t destOffset);
+    EC::ErrorCode uploadBuffer(const void* src, const int64_t uploadByteSize, const int64_t destOffset);
 
     /// Copy uploadByteSize bytes from src to the GPU starting from the begining of the GPU memory
     /// @param src CPU buffer which will be uploaded to the GPU
     /// @param uploadByteSize How many bytes from src will be uploaded to the GPU
     /// @returns Status of the task.
-    EC::ErrorCode uploadToBuffer(const void* src, const int64_t uploadByteSize);
+    EC::ErrorCode uploadBuffer(const void* src, const int64_t uploadByteSize);
+
+    /// Copy the whole GPU buffer to a CPU buffer. The CPU buffer must be preallocated and must have
+    /// byte size greater or equal to byteSize
+    EC::ErrorCode downloadBuffer(void* dst);
+
+    /// Copy donwloadByteSize bytes from GPU buffer to a CPU buffer, starting from the begining for the GPU buffer.
+    /// The CPU buffer must be preallocated and must have byte size greater or equal to donwloadByteSize
+    EC::ErrorCode downloadBuffer(void* dst, const int64_t donwloadByteSize);
+
+    /// Copy donwloadByteSize bytes from GPU buffer to a CPU buffer, starting from srcOffset-th byte of the GPU buffer.
+    /// The CPU buffer must be preallocated and must have byte size greater or equal to donwloadByteSize
+    EC::ErrorCode downloadBuffer(void* dst, const int64_t donwloadByteSize, const int64_t srcOffset);
 
     /// Deallocate all GPU memory allocated by the buffer and set its size to 0
     EC::ErrorCode freeMem();

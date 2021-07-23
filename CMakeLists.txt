@@ -159,7 +159,8 @@ add_library(gpu_sim OBJECT gpu/advection.cu)
 set_target_properties(gpu_sim
     PROPERTIES
 		CUDA_PTX_COMPILATION ON
-		CUDA_ARCHITECTURES "20")
+		CUDA_ARCHITECTURES 20)
+
 add_dependencies(${PROJECT_NAME} gpu_sim)
 
 add_custom_command(
