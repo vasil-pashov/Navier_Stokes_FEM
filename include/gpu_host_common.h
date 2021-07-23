@@ -51,21 +51,44 @@ struct KernelLaunchParams {
     int sharedMemSize;
 };
 
-
-class GPUDevice {
+/// Simple class to wrap around CUDA GPU device. It has functions to load modules and
+/// extract functions from them. It does not store any module/kernel data only extracts
+/// them from a given binary. It sotres the device handle and the device contex. 
+class GPUDeviceBase {
 public:
     friend class GPUDeviceManager;
-    GPUDevice() = default;
+    /// Create unitialized device
+    GPUDeviceBase();
+    /// Initialize the device from the device list returned by the API.
+    /// The device contex will not be pushed when this is called.
+    /// @param index The index of the device in the list returned by the API
     EC::ErrorCode init(int index);
-    EC::ErrorCode addModule(const char* moduleSource, const char* kernelNames[], int kernelCount, CUmodule* out = nullptr);
-    EC::ErrorCode callKernelSync(const std::string& name, const KernelLaunchParams& params);
-    ~GPUDevice();
-private:
+    /// Load a module containing device code and kernels.
+    /// @param[in] moduleSource The source code for the module which will be created. All kernels must be
+    /// found in this source. If not an error is returned.
+    /// @param[in] kernelNames List of kernel names which will be extracted from the modules created from moduleSource.
+    /// Compiles mangle the names of the functions, so it's highly possible that a kernel won't be fuound unless
+    /// it's declared as extern "C" in the source
+    /// @param[in] kernelCount The count of the items in kernelNames
+    /// @param[out] moduleOut The compiled module will be saved here
+    /// @param[out] kernelsOut Preallocated array where the extracted kernel handles will be saved. It must have at least
+    /// kernelCount number of elements preallocated.
+    EC::ErrorCode loadModule(
+        const char* moduleSource,
+        const char* kernelNames[],
+        int kernelCount,
+        CUmodule& moduleOut,
+        CUfunction* kernelsOut
+    );
+    /// Launch a GPU kernel and wait for it to finish
+    /// @param[in] kernel Handle to the kernel which will be launched
+    /// @param[in] kernelParams The parameters for the kernel 
+    EC::ErrorCode callKernelSync(CUfunction kernel, const KernelLaunchParams& kernelParams);
+    ~GPUDeviceBase();
+protected:
     void printDeviceInfo() const;
-    CUdevice handle;
+    CUdevice deviceHandle;
     CUcontext context;
-    std::vector<CUmodule> modules;
-    std::unordered_map<std::string, CUfunction> kernels;
 };
 
 class GPUDeviceManager {
@@ -75,11 +98,11 @@ public:
     GPUDeviceManager& operator=(const GPUDeviceManager&) = delete;
     EC::ErrorCode init();
     EC::ErrorCode addModuleFromFile(const char* filePath, const char* kernelNames[], int kernelCount);
-    GPUDevice& getDevice(int index) {
+    GPUDeviceBase& getDevice(int index) {
         return devices[index];
     }
 private:
-    std::vector<GPUDevice> devices;
+    std::vector<GPUDeviceBase> devices;
 };
 
 /// Simple class to wrap around a buffer which lives on the GPU

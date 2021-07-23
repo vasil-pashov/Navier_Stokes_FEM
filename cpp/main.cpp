@@ -12,7 +12,7 @@
 #include "tbb/task_scheduler_init.h"
 #include "tbb/global_control.h"
 
-#include "gpu_context.h"
+#include "gpu_host_common.h"
 
 enum SolverMethod {
     FEM,
