@@ -28,7 +28,7 @@ private:
     CUcontext ctx;
 };
 
-inline EC::ErrorCode checkCudaError(CUresult code, const char* file, const char* function, int line) {
+EC::ErrorCode checkCudaError(CUresult code, const char* file, const char* function, int line) {
     if(code != CUDA_SUCCESS) {
         EC::ErrorCode result;
         const char* errorName = nullptr;
@@ -72,22 +72,6 @@ inline EC::ErrorCode checkCudaError(CUresult code, const char* file, const char*
     }
     return EC::ErrorCode();
 }
-
-#ifdef _MSC_VER
-    #define CUDAUTILS_CPP_FUNC_NAME __FUNCSIG__
-#else
-    #define CUDAUTILS_CPP_FUNC_NAME __PRETTY_FUNCTION__
-#endif
-
-#define RETURN_ON_CUDA_ERROR(f) \
-{ \
-    EC::ErrorCode res = checkCudaError(f, __FILE__, CUDAUTILS_CPP_FUNC_NAME, __LINE__); \
-    if(res.hasError()) { \
-        return res; \
-    } \
-}
-
-#define CHECK_CUDA_ERROR(f) checkCudaError(f, __FILE__, CUDAUTILS_CPP_FUNC_NAME, __LINE__)
 
 #define CUDAUTILS_PRINT_DEVICE_ATTRIBUTE(attribute, device) \
     {\
@@ -184,36 +168,6 @@ GPUDeviceBase::~GPUDeviceBase() {
     if(error.hasError()) {
         fprintf(stderr, "[Error] %s\n", error.getMessage());
     }
-}
-
-EC::ErrorCode GPUDeviceManager::init() {
-    RETURN_ON_CUDA_ERROR(cuInit(0));
-
-    int deviceCount = 0;
-    RETURN_ON_CUDA_ERROR(cuDeviceGetCount(&deviceCount));
-    if(deviceCount == 0) {
-        return EC::ErrorCode(-1, "Cannot find CUDA capable devices!");
-    }
-    printf("CUDA Devices found: %d\n", deviceCount);
-    devices.resize(deviceCount);
-    for(int i = 0; i < deviceCount; ++i) {
-        devices[i].init(i);
-    }
-    return EC::ErrorCode();
-}
-
-EC::ErrorCode GPUDeviceManager::addModuleFromFile(const char* filepath, const char* kernelNames[], int kernelCount) {
-    std::ifstream file(filepath, std::ifstream::ate | std::ifstream::binary);
-    if(file.fail()) {
-        return EC::ErrorCode(errno, "%d: %s. Cannot open file: %s.", errno, strerror(errno), filepath);
-    }
-    const int64_t fileSize = file.tellg();
-    file.seekg(0, std::ios::beg);
-    std::string data;
-    data.resize(fileSize);
-    file.read(&data[0], fileSize);
-
-    return EC::ErrorCode();
 }
 
 void GPUDeviceBase::printDeviceInfo() const {

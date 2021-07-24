@@ -2,13 +2,33 @@
 #include <cuda.h>
 #include <vector>
 #include <unordered_map>
-
+#include <memory>
+#include <fstream>
+#include "error_code.h"
 
 namespace EC {
     class ErrorCode;
 }
 
 namespace GPU {
+
+EC::ErrorCode checkCudaError(CUresult code, const char* file, const char* function, int line);
+
+#ifdef _MSC_VER
+    #define CUDAUTILS_CPP_FUNC_NAME __FUNCSIG__
+#else
+    #define CUDAUTILS_CPP_FUNC_NAME __PRETTY_FUNCTION__
+#endif
+
+#define RETURN_ON_CUDA_ERROR(f) \
+{ \
+    EC::ErrorCode res = checkCudaError(f, __FILE__, CUDAUTILS_CPP_FUNC_NAME, __LINE__); \
+    if(res.hasError()) { \
+        return res; \
+    } \
+}
+
+#define CHECK_CUDA_ERROR(f) checkCudaError(f, __FILE__, CUDAUTILS_CPP_FUNC_NAME, __LINE__)
 
 struct Dim3 {
     explicit Dim3(int x) : Dim3(x, 1, 1)
@@ -98,12 +118,50 @@ public:
     GPUDeviceManager& operator=(const GPUDeviceManager&) = delete;
     EC::ErrorCode init();
     EC::ErrorCode addModuleFromFile(const char* filePath, const char* kernelNames[], int kernelCount);
-    GPUDeviceBase& getDevice(int index) {
-        return devices[index];
-    }
+    GPUDeviceBase& getDevice(int index);
 private:
     std::vector<GPUDeviceBase> devices;
 };
+
+inline EC::ErrorCode GPUDeviceManager::init() {
+    RETURN_ON_CUDA_ERROR(cuInit(0));
+
+    int deviceCount = 0;
+    RETURN_ON_CUDA_ERROR(cuDeviceGetCount(&deviceCount));
+    if(deviceCount == 0) {
+        return EC::ErrorCode(-1, "Cannot find CUDA capable devices!");
+    }
+    printf("CUDA Devices found: %d\n", deviceCount);
+    devices.resize(deviceCount);
+    for(int i = 0; i < deviceCount; ++i) {
+        const EC::ErrorCode ec = devices[i].init(i);
+        if(ec.hasError()) {
+            return ec;
+        }
+    }
+    return EC::ErrorCode();
+}
+
+inline EC::ErrorCode GPUDeviceManager::addModuleFromFile(
+    const char* filepath,
+    const char* kernelNames[],
+    int kernelCount
+) {
+    std::ifstream file(filepath, std::ifstream::ate | std::ifstream::binary);
+    if(file.fail()) {
+        return EC::ErrorCode(errno, "%d: %s. Cannot open file: %s.", errno, strerror(errno), filepath);
+    }
+    const int64_t fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::unique_ptr<char[]> data(new char[fileSize + 1]);
+    data[fileSize] = '\0';
+    file.read(&data[0], fileSize);
+    return EC::ErrorCode();
+}
+
+inline GPUDeviceBase& GPUDeviceManager::getDevice(int index) {
+    return devices[index];
+}
 
 /// Simple class to wrap around a buffer which lives on the GPU
 /// It has functionalities to allocate, free, and upload data to the GPU

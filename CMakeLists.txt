@@ -153,6 +153,8 @@ target_precompile_headers(${PROJECT_NAME}
 		<nlohmann/json.hpp>
 		<opencv2/imgproc.hpp>
 		<opencv2/imgcodecs.hpp>
+		# From the project
+		[[include/error_code.h]]
 )
 
 add_library(gpu_sim OBJECT gpu/advection.cu)
