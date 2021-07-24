@@ -76,7 +76,6 @@ struct KernelLaunchParams {
 /// them from a given binary. It sotres the device handle and the device contex. 
 class GPUDeviceBase {
 public:
-    friend class GPUDeviceManager;
     /// Create unitialized device
     GPUDeviceBase();
     /// Initialize the device from the device list returned by the API.
@@ -111,19 +110,28 @@ protected:
     CUcontext context;
 };
 
-class GPUDeviceManager {
+template<typename Device>
+class GPUDeviceManagerBase {
 public:
-    GPUDeviceManager() = default;
-    GPUDeviceManager(const GPUDeviceManager&) = delete;
-    GPUDeviceManager& operator=(const GPUDeviceManager&) = delete;
+    GPUDeviceManagerBase() = default;
+    GPUDeviceManagerBase(const GPUDeviceManagerBase&) = delete;
+    GPUDeviceManagerBase& operator=(const GPUDeviceManagerBase&) = delete;
     EC::ErrorCode init();
-    EC::ErrorCode addModuleFromFile(const char* filePath, const char* kernelNames[], int kernelCount);
-    GPUDeviceBase& getDevice(int index);
+    EC::ErrorCode addModuleFromFile(
+        const char* filePath,
+        const char* kernelNames[],
+        int kernelCount,
+        CUmodule modules[],
+        CUfunction* kernels[]
+    );
+    Device& getDevice(int index);
+    int getDeviceCount() const;
 private:
-    std::vector<GPUDeviceBase> devices;
+    std::vector<Device> devices;
 };
 
-inline EC::ErrorCode GPUDeviceManager::init() {
+template<typename Device>
+inline EC::ErrorCode GPUDeviceManagerBase<Device>::init() {
     RETURN_ON_CUDA_ERROR(cuInit(0));
 
     int deviceCount = 0;
@@ -142,10 +150,17 @@ inline EC::ErrorCode GPUDeviceManager::init() {
     return EC::ErrorCode();
 }
 
-inline EC::ErrorCode GPUDeviceManager::addModuleFromFile(
+/// Base GPU device manager class, which stores devices of a specific concrete type.
+/// It can initialize all initializes listed by the API and load modules and kernels
+/// from sources for all devices.
+/// @tparam Device Concrete type of GPU devices which will be stored in the manager
+template<typename Device>
+inline EC::ErrorCode GPUDeviceManagerBase<Device>::addModuleFromFile(
     const char* filepath,
     const char* kernelNames[],
-    int kernelCount
+    int kernelCount,
+    CUmodule modules[],
+    CUfunction* kernels[]
 ) {
     std::ifstream file(filepath, std::ifstream::ate | std::ifstream::binary);
     if(file.fail()) {
@@ -155,13 +170,32 @@ inline EC::ErrorCode GPUDeviceManager::addModuleFromFile(
     file.seekg(0, std::ios::beg);
     std::unique_ptr<char[]> data(new char[fileSize + 1]);
     data[fileSize] = '\0';
-    file.read(&data[0], fileSize);
+    file.read(data.get(), fileSize);
+    for(int i = 0; i < devices.count(); ++i) {
+        const EC::ErrorCode ec = devices[i].loadModule(
+            data.get(),
+            kernelNames,
+            kernelCount,
+            modules[i],
+            kernels[i]
+        );
+        if(ec.hasError()) {
+            return ec;
+        }
+    }
     return EC::ErrorCode();
 }
 
-inline GPUDeviceBase& GPUDeviceManager::getDevice(int index) {
+template<typename Device>
+inline Device& GPUDeviceManagerBase<Device>::getDevice(int index) {
     return devices[index];
 }
+
+template<typename Device>
+inline int GPUDeviceManagerBase<Device>::getDeviceCount() const {
+    return devices.size();
+}
+
 
 /// Simple class to wrap around a buffer which lives on the GPU
 /// It has functionalities to allocate, free, and upload data to the GPU

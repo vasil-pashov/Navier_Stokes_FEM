@@ -127,13 +127,6 @@ int main(int nargs, char** cargs) {
     }();
     tbb::global_control tbbMaxThreadsControl(tbb::global_control::max_allowed_parallelism, numThreads);
 
-    GPU::GPUDeviceManager devMan;
-    error = devMan.init();
-    if(error.hasError()) {
-        fprintf(stderr, "[Error] %s\n", error.getMessage());
-        return 1;
-    }
-
     NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
     error = assembler.init(
         argParse.getStringVal("sceneFile"),
