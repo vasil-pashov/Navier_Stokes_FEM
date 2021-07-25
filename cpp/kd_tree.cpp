@@ -77,7 +77,7 @@ namespace NSFem {
 
     int TriangleKDTree::build(
     	std::vector<int>& indices,
-    	const BBox2D& boundingBox,
+    	const BBox2D& subtreeBBox,
     	int axis,
     	int level
     ) {
@@ -90,14 +90,14 @@ namespace NSFem {
     		return nodes.size();
     	}
 
-    	const float splitPoint = (bbox.getMin()[axis] + bbox.getMax()[axis]) * 0.5f;
-    	Point2D leftBBMax = boundingBox.getMax();
+    	const float splitPoint = (subtreeBBox.getMin()[axis] + subtreeBBox.getMax()[axis]) * 0.5f;
+    	Point2D leftBBMax = subtreeBBox.getMax();
     	leftBBMax[axis] = splitPoint;
-    	BBox2D leftBoundingBox(boundingBox.getMin(), leftBBMax);
+    	BBox2D leftBoundingBox(subtreeBBox.getMin(), leftBBMax);
 
-    	Point2D rightBBMin = boundingBox.getMin();
+    	Point2D rightBBMin = subtreeBBox.getMin();
     	rightBBMin[axis] = splitPoint;
-    	BBox2D rightBoundingBox(rightBBMin, boundingBox.getMax());
+    	BBox2D rightBoundingBox(rightBBMin, subtreeBBox.getMax());
 
     	const int newAxis = (axis + 1) % 2;
 
