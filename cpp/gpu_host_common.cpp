@@ -8,26 +8,6 @@
 
 namespace GPU {
 
-struct ScopedGPUContext {
-    explicit ScopedGPUContext(CUcontext ctx) : ctx(ctx) {
-        cuCtxPushCurrent(ctx);
-    }
-
-    ScopedGPUContext(const ScopedGPUContext&) = delete;
-    ScopedGPUContext& operator=(const ScopedGPUContext&) = delete;
-
-    ScopedGPUContext(ScopedGPUContext&& other) = delete;
-    ScopedGPUContext& operator=(ScopedGPUContext&&) = delete;
-
-    ~ScopedGPUContext() {
-        CUcontext popped;
-        cuCtxPopCurrent(&popped);
-        assert(ctx == popped);
-    }
-private:
-    CUcontext ctx;
-};
-
 EC::ErrorCode checkCudaError(CUresult code, const char* file, const char* function, int line) {
     if(code != CUDA_SUCCESS) {
         EC::ErrorCode result;
@@ -105,7 +85,7 @@ EC::ErrorCode GPUDeviceBase::loadModule(
     const char* kernelNames[],
     int kernelCount,
     CUmodule& out,
-    CUfunction* kernels
+    CUfunction** kernels
 ) {
     const int complierOptionsCount = 4;
     CUjit_option compilerOptions[complierOptionsCount] = {
@@ -125,8 +105,7 @@ EC::ErrorCode GPUDeviceBase::loadModule(
     };
 
     ScopedGPUContext ctxGuard(context);
-    CUmodule module;
-    CUresult res = cuModuleLoadDataEx(&module, moduleSource, complierOptionsCount, compilerOptions, compilerOptionsValue);
+    CUresult res = cuModuleLoadDataEx(&out, moduleSource, complierOptionsCount, compilerOptions, compilerOptionsValue);
     if(res != CUDA_SUCCESS) {
         const char* errorName = nullptr;
         cuGetErrorName(res, &errorName);
@@ -142,10 +121,8 @@ EC::ErrorCode GPUDeviceBase::loadModule(
         return err;
     }
     
-    out = module;
     for(int i = 0; i < kernelCount; ++i) {
-        CUfunction kernel = kernels[i];
-        RETURN_ON_CUDA_ERROR(cuModuleGetFunction(&kernel, module, kernelNames[i]));
+        RETURN_ON_CUDA_ERROR(cuModuleGetFunction(kernels[i], out, kernelNames[i]));
     }
     return EC::ErrorCode();
 }
@@ -292,11 +269,12 @@ EC::ErrorCode GPUBuffer::init(int64_t byteSize) {
         }
     }
     RETURN_ON_CUDA_ERROR(cuMemAlloc(&handle, byteSize));
+    this->byteSize = byteSize;
     return EC::ErrorCode();
 }
 
 EC::ErrorCode GPUBuffer::uploadBuffer(const void* src, const int64_t uploadByteSize, const int64_t destOffset) {
-    assert(destOffset + uploadByteSize < byteSize && "Trying to use more space than there is allocated");
+    assert(destOffset + uploadByteSize <= byteSize && "Trying to use more space than there is allocated");
     RETURN_ON_CUDA_ERROR(cuMemcpyHtoD((CUdeviceptr)((char*)handle + destOffset), src, uploadByteSize));
     return EC::ErrorCode();
 }

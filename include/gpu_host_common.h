@@ -2,8 +2,6 @@
 #include <cuda.h>
 #include <vector>
 #include <unordered_map>
-#include <memory>
-#include <fstream>
 #include "error_code.h"
 
 namespace EC {
@@ -49,6 +47,26 @@ struct Dim3 {
     int z;
 };
 
+struct ScopedGPUContext {
+    explicit ScopedGPUContext(CUcontext ctx) : ctx(ctx) {
+        cuCtxPushCurrent(ctx);
+    }
+
+    ScopedGPUContext(const ScopedGPUContext&) = delete;
+    ScopedGPUContext& operator=(const ScopedGPUContext&) = delete;
+
+    ScopedGPUContext(ScopedGPUContext&& other) = delete;
+    ScopedGPUContext& operator=(ScopedGPUContext&&) = delete;
+
+    ~ScopedGPUContext() {
+        CUcontext popped;
+        cuCtxPopCurrent(&popped);
+        assert(ctx == popped);
+    }
+private:
+    CUcontext ctx;
+};
+
 struct KernelLaunchParams {
     KernelLaunchParams(Dim3 gridSize, Dim3 blockSize, void** kernelParams) :
         KernelLaunchParams(gridSize, blockSize, 0, nullptr, kernelParams, nullptr)
@@ -90,14 +108,14 @@ public:
     /// it's declared as extern "C" in the source
     /// @param[in] kernelCount The count of the items in kernelNames
     /// @param[out] moduleOut The compiled module will be saved here
-    /// @param[out] kernelsOut Preallocated array where the extracted kernel handles will be saved. It must have at least
-    /// kernelCount number of elements preallocated.
+    /// @param[out] kernelsOut Preallocated array of pointer to kernels handles where the extracted kernel handles will be saved. 
+    /// It must have at least kernelCount number of elements preallocated.
     EC::ErrorCode loadModule(
         const char* moduleSource,
         const char* kernelNames[],
         int kernelCount,
         CUmodule& moduleOut,
-        CUfunction* kernelsOut
+        CUfunction** kernelsOut
     );
     /// Launch a GPU kernel and wait for it to finish
     /// @param[in] kernel Handle to the kernel which will be launched
@@ -110,28 +128,24 @@ protected:
     CUcontext context;
 };
 
+/// Base GPU device manager class, which stores devices of a specific concrete type.
+/// It can initialize all devices listed by the API and store them.
+/// @tparam Device Concrete type of GPU devices which will be stored in the manager
 template<typename Device>
 class GPUDeviceManagerBase {
 public:
     GPUDeviceManagerBase() = default;
     GPUDeviceManagerBase(const GPUDeviceManagerBase&) = delete;
     GPUDeviceManagerBase& operator=(const GPUDeviceManagerBase&) = delete;
-    EC::ErrorCode init();
-    EC::ErrorCode addModuleFromFile(
-        const char* filePath,
-        const char* kernelNames[],
-        int kernelCount,
-        CUmodule modules[],
-        CUfunction* kernels[]
-    );
+    EC::ErrorCode initDevices();
     Device& getDevice(int index);
     int getDeviceCount() const;
-private:
+protected:
     std::vector<Device> devices;
 };
 
 template<typename Device>
-inline EC::ErrorCode GPUDeviceManagerBase<Device>::init() {
+inline EC::ErrorCode GPUDeviceManagerBase<Device>::initDevices() {
     RETURN_ON_CUDA_ERROR(cuInit(0));
 
     int deviceCount = 0;
@@ -143,42 +157,6 @@ inline EC::ErrorCode GPUDeviceManagerBase<Device>::init() {
     devices.resize(deviceCount);
     for(int i = 0; i < deviceCount; ++i) {
         const EC::ErrorCode ec = devices[i].init(i);
-        if(ec.hasError()) {
-            return ec;
-        }
-    }
-    return EC::ErrorCode();
-}
-
-/// Base GPU device manager class, which stores devices of a specific concrete type.
-/// It can initialize all initializes listed by the API and load modules and kernels
-/// from sources for all devices.
-/// @tparam Device Concrete type of GPU devices which will be stored in the manager
-template<typename Device>
-inline EC::ErrorCode GPUDeviceManagerBase<Device>::addModuleFromFile(
-    const char* filepath,
-    const char* kernelNames[],
-    int kernelCount,
-    CUmodule modules[],
-    CUfunction* kernels[]
-) {
-    std::ifstream file(filepath, std::ifstream::ate | std::ifstream::binary);
-    if(file.fail()) {
-        return EC::ErrorCode(errno, "%d: %s. Cannot open file: %s.", errno, strerror(errno), filepath);
-    }
-    const int64_t fileSize = file.tellg();
-    file.seekg(0, std::ios::beg);
-    std::unique_ptr<char[]> data(new char[fileSize + 1]);
-    data[fileSize] = '\0';
-    file.read(data.get(), fileSize);
-    for(int i = 0; i < devices.count(); ++i) {
-        const EC::ErrorCode ec = devices[i].loadModule(
-            data.get(),
-            kernelNames,
-            kernelCount,
-            modules[i],
-            kernels[i]
-        );
         if(ec.hasError()) {
             return ec;
         }
@@ -265,7 +243,11 @@ public:
     EC::ErrorCode freeMem();
 
     /// Get an implementation specific handle which represents the buffer on the GPU
-    CUdeviceptr getHandle() const {
+    const CUdeviceptr& getHandle() const {
+        return handle;
+    }
+
+    CUdeviceptr& getHandle() {
         return handle;
     }
 

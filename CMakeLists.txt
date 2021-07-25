@@ -56,6 +56,7 @@ set(CPP
 	cpp/kd_tree.cpp
 	cpp/cmd_line_parser.cpp
 	cpp/gpu_host_common.cpp
+	cpp/gpu_simulation_device.cpp
 )
 
 set(HEADERS
@@ -69,6 +70,7 @@ set(HEADERS
 	include/cmd_line_parser.h
 	include/small_vector.h
 	include/gpu_host_common.h
+	include/gpu_simulation_device.h
 	sparse_matrix_math/include/sparse_matrix_math.h
 )
 
