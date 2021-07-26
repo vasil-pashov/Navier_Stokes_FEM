@@ -1,5 +1,6 @@
 #include "kd_tree.h"
 #include "small_vector.h"
+#include "grid.h"
 #include <cmath>
 #include <vector>
 #include <numeric>
@@ -9,51 +10,6 @@ namespace NSFem {
     template<typename T>
     static inline T square(T a) {
         return a * a;
-    }
-
-    bool isPointInTriagle(
-        const Point2D& P,
-        const Point2D& A,
-        const Point2D& B,
-        const Point2D& C,
-        real& xi,
-        real& eta
-    ) {
-        // This function uses the barrycentric coordinates to check if a point lies in a triangle.
-        // Since we are in 2D we can describe point p as a linear combination of two vectors, we choose
-        // them to be AB and AC. We want (0, 0) in this new space to be the point A
-        // p = A + l1*AB + l2*AC
-        // |px|  = |Ax + l1(Bx - Ax) + l2(Cx - Ax)|
-        // |py|  = |Ay + l1(By - Ay) + l2(Cy - Ay)|
-        //
-        // |px - ax| = |Bx - Ax  Cx - Ax||l1|
-        // |py - ay| = |By - Ay  Cy - Ay||l2|
-        //
-        // |l1| = 1/D * |Cy - Ay  Ax - Cx||px - ax|
-        // |l2| = 1/D * |Ay - By  Bx - Ax||py - ay|
-        const Point2D AB = B - A;
-        const Point2D AC = C - A;
-        const Point2D AP = P - A;
-        const real D = (AB.x * AC.y) - (AB.y * AC.x);
-        assert(D != 0);
-        const int DSign = D > 0 ? 1 : -1;
-        // We do not want to divide by the determinant, so when we solve the system we get the result
-        // scaled by the determinant.
-        const real scaledBarry1 =  (AP.x * AC.y - AP.y * AC.x) * DSign;
-        if(scaledBarry1 < 0 || scaledBarry1 > D) {
-            return false;
-        }
-        const real scaledBarry2 = (AP.y * AB.x - AP.x * AB.y) * DSign;
-        if(scaledBarry2 < 0 || scaledBarry1 > D - scaledBarry2) {
-            return false;
-        }
-            
-        // When we reach this point we know that the point "start" is inside the triangle
-        // We need to scale down the barrycentroc coords and we'll get the point inside the triangle
-        const real dInv = 1 / std::abs(D);
-        xi = scaledBarry1 * dInv;
-        eta = scaledBarry2 * dInv;
-        return true;
     }
 
     TriangleKDTreeBuilder::TriangleKDTreeBuilder() :

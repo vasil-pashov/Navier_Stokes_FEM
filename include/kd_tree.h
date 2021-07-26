@@ -1,27 +1,11 @@
 #pragma once
 #include <vector>
 #include <limits>
-#include "grid.h"
 #include "kd_tree_common.cuh"
 
 namespace NSFem {
 
-/// Check if a 2D point p lies inside the triangle formed by point A, B and C
-/// @param[in] P The point which is goint to be tested
-/// @param[in] A First vertex of the triangle
-/// @param[in] B Second vertex of the triangle
-/// @param[in] C Third vertex of the triangle
-/// @param[out] xi First barrycentric coordinate of the point inside the triangle
-/// @param[out] eta Second barrycentric coordinate of the point inside the triangle
-/// @retval true if the point lies in the triangle, false othwerwise
-bool isPointInTriagle(
-    const Point2D& p,
-    const Point2D& A,
-    const Point2D& B,
-    const Point2D& C,
-    real& xi,
-    real& eta
-);
+class FemGrid2D;
 
 class TriangleKDTree {
 public:

@@ -75,6 +75,8 @@ set(HEADERS
 	sparse_matrix_math/include/sparse_matrix_math.h
 	# shared between gpu and cpu
 	gpu_cpu_shared/kd_tree_common.cuh
+	gpu_cpu_shared/misc_common.cuh
+	gpu_cpu_shared/defines_common.cuh
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
