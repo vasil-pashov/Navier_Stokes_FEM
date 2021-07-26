@@ -619,8 +619,8 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
     if(outPath != nullptr) {
         outFolder = outPath;
     }
-
-    kdTree.init(&grid);
+    TriangleKDTreeBuilder builder;
+    kdTree = builder.build(&grid);
     return EC::ErrorCode();
 
 }

@@ -56,36 +56,44 @@ namespace NSFem {
         return true;
     }
 
-    TriangleKDTree::TriangleKDTree(int maxDepth, int minLeafSize) :
-        maxDepth(std::min(maxDepth, 29)),
-        minLeafSize(minLeafSize)
-    {}
-    TriangleKDTree::TriangleKDTree() :
+    TriangleKDTreeBuilder::TriangleKDTreeBuilder() :
         maxDepth(-1),
         minLeafSize(16)
     {}
-    void TriangleKDTree::init(FemGrid2D* grid) {
-        this->grid = grid;
-        this->bbox = grid->getBBox();
+
+    TriangleKDTreeBuilder::TriangleKDTreeBuilder(int maxDepth, int minLeafSize) :
+        maxDepth(std::min(maxDepth, 29)),
+        minLeafSize(minLeafSize)
+    {}
+
+    TriangleKDTree TriangleKDTreeBuilder::build(FemGrid2D* grid) {
+        assert(grid != nullptr);
+        TriangleKDTree result;
+        result.grid = grid;
+        result.bbox = grid->getBBox();
         // The formula for depth is taken from pbrt
         maxDepth = maxDepth > -1 ? maxDepth : std::min(29, (int)std::round(8 + 1.3f * std::log(grid->getElementsCount())));
         assert(grid->getElementSize() == 6);
         std::vector<int> indices(grid->getElementsCount());
         std::iota(indices.begin(), indices.end(), 0);
-        build(indices, bbox, 0, 0);
+        build(grid, result.leafTriangleIndexes, result.nodes, indices, result.bbox, 0, 0);
+        return result;
     }
 
-    int TriangleKDTree::build(
-    	std::vector<int>& indices,
-    	const BBox2D& subtreeBBox,
-    	int axis,
-    	int level
+    int TriangleKDTreeBuilder::build(
+        FemGrid2D* grid,
+        std::vector<int>& leafTriangleIndexes,
+        std::vector<TriangleKDTree::Node>& nodes,
+        std::vector<int>& indices,
+        const BBox2D& subtreeBBox,
+        int axis,
+        int level
     ) {
     	if (level >= maxDepth || indices.size() <= minLeafSize) {
     		const int numTriangles = indices.size();
     		const int trianglesOffset = leafTriangleIndexes.size();
     		std::move(indices.begin(), indices.end(), std::back_inserter(leafTriangleIndexes));
-    		const Node leaf = Node::makeLeaf(trianglesOffset, numTriangles);
+    		const TriangleKDTree::Node leaf = TriangleKDTree::Node::makeLeaf(trianglesOffset, numTriangles);
     		nodes.push_back(leaf);
     		return nodes.size();
     	}
@@ -123,10 +131,14 @@ namespace NSFem {
 
     	const int currentNodeIndex = nodes.size();
     	nodes.emplace_back();
-    	const int rightNodeIndex = build(leftIndexes, leftBoundingBox, newAxis, level + 1);
+    	const int rightNodeIndex = build(grid, leafTriangleIndexes, nodes, leftIndexes, leftBoundingBox, newAxis, level + 1);
     	nodes[currentNodeIndex].makeInternal(axis, rightNodeIndex, splitPoint);
-    	return build(rightIndexes, rightBoundingBox, newAxis, level + 1);
+    	return build(grid, leafTriangleIndexes, nodes, rightIndexes, rightBoundingBox, newAxis, level + 1);
     }
+
+    TriangleKDTree::TriangleKDTree() :
+        grid(nullptr)
+    {}
 
     int TriangleKDTree::findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
         int currentNodeIndex = getRootIndex();

@@ -24,16 +24,13 @@ bool isPointInTriagle(
 
 class TriangleKDTree {
 public:
-    /// @brief Default constrict the tree.
-    /// maxDepth will be log(meshTriangles), minLeafSize will be 16
+    friend class TriangleKDTreeBuilder;
+    /// @brief Default constrict the tree with empty bounding box and no nodes.
     TriangleKDTree();
-    /// Constructor for a KDTree. Does not allocate memory, nor builds the tree.
-    /// Only sets the passed config parameters.
-    /// @param[in] maxDepth The maximal depth of the tree.
-    /// @param[in] minLeafSize The minimum elements in a leaf. If at any point durig the
-    /// construction of the tree any node has less or equal elements in it, it will be made a leaf
-    TriangleKDTree(int maxDepth, int minLeafSize);
-    void init(FemGrid2D* grid);
+    TriangleKDTree(TriangleKDTree&&) = default;
+    TriangleKDTree& operator=(TriangleKDTree&&) = default;
+    TriangleKDTree(const TriangleKDTree&) = delete;
+    TriangleKDTree& operator=(const TriangleKDTree&) = delete;
     /// @brief Checks if a point lies inside any of the triangles in the grid.
     /// If so xi and eta will be set to the barrycentric coordinates of the point inside the triangle
     /// @param[in] point 2D point in world space which will be tested against the tree
@@ -89,12 +86,6 @@ private:
 			unsigned int triangleOffset;
 		};
 	};
-    int build(
-    	std::vector<int>& indices,
-    	const BBox2D& boundingBox,
-    	int axis,
-    	int level
-    );
 
     int getRootIndex() const {
         return 0;
@@ -132,10 +123,8 @@ private:
 
     std::vector<Node> nodes;
     std::vector<int> leafTriangleIndexes;
-    FemGrid2D *grid;
     BBox2D bbox;
-    int maxDepth;
-    int minLeafSize;
+    FemGrid2D *grid;
 };
 
 
@@ -186,5 +175,25 @@ inline float TriangleKDTree::Node::getTriangleOffset() const {
 inline void TriangleKDTree::Node::setRightChildIndex(unsigned int index) {
 	flags |= (index << 2);
 }
+
+class TriangleKDTreeBuilder {
+public:
+    TriangleKDTreeBuilder();
+    TriangleKDTreeBuilder(int maxDepth, int minLeafSize);
+    TriangleKDTree build(FemGrid2D* grid);
+private:
+    int build(
+        FemGrid2D* grid,
+        std::vector<int>& leafTriangleIndexes,
+        std::vector<TriangleKDTree::Node>& nodes,
+        std::vector<int>& indices,
+        const BBox2D& subtreeBBox,
+        int axis,
+        int level
+    );
+    int maxDepth;
+    int minLeafSize;
+};
+
 
 };
