@@ -83,7 +83,7 @@ namespace NSFem {
     int TriangleKDTreeBuilder::build(
         FemGrid2D* grid,
         std::vector<int>& leafTriangleIndexes,
-        std::vector<TriangleKDTree::Node>& nodes,
+        std::vector<KDNode>& nodes,
         std::vector<int>& indices,
         const BBox2D& subtreeBBox,
         int axis,
@@ -93,7 +93,7 @@ namespace NSFem {
     		const int numTriangles = indices.size();
     		const int trianglesOffset = leafTriangleIndexes.size();
     		std::move(indices.begin(), indices.end(), std::back_inserter(leafTriangleIndexes));
-    		const TriangleKDTree::Node leaf = TriangleKDTree::Node::makeLeaf(trianglesOffset, numTriangles);
+    		const KDNode leaf = KDNode::makeLeaf(trianglesOffset, numTriangles);
     		nodes.push_back(leaf);
     		return nodes.size();
     	}
@@ -142,7 +142,7 @@ namespace NSFem {
 
     int TriangleKDTree::findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
         int currentNodeIndex = getRootIndex();
-        Node currentNode = nodes[currentNodeIndex];
+        KDNode currentNode = nodes[currentNodeIndex];
         SmallVector<TraversalStackEntry, 64> traversalStack;
         // Search the element which contains the given point (if there is such). Not that unlike
         // nearest neighbour (or raytracing) we should descend only to the nearest side of the splitting plane
@@ -181,7 +181,7 @@ namespace NSFem {
         while(!traversalStack.empty()) {
             const TraversalStackEntry& stackEntry = traversalStack.back();
             const int currentNodeIndex = stackEntry.getNode();
-            const Node& currentNode = nodes[currentNodeIndex];
+            const KDNode& currentNode = nodes[currentNodeIndex];
             if(currentNode.isLeaf()) {
                 // When we are at a leaf we will examine all points in the leaf and compare the minimal distance
                 nearestNeghbourProcessLeaf(point, currentNode, minDistSq, closestFEMNodeIndex);
@@ -197,7 +197,7 @@ namespace NSFem {
                     break;
                 }
                 const int activeNodeIndex = traversalStack.back().getNode();
-                const Node& activeNode = nodes[activeNodeIndex];
+                const KDNode& activeNode = nodes[activeNodeIndex];
                 const int axis = activeNode.getAxis();
                 const real splitPoint = activeNode.getSplitPoint();
                 if(traversalStack.back().getVisitCount() == 0) {
@@ -245,7 +245,7 @@ namespace NSFem {
 
     void TriangleKDTree::nearestNeghbourProcessLeaf(
         const Point2D& point,
-        const Node& currentNode,
+        const KDNode& currentNode,
         real& minDistSq,
         int& closestFEMNodeIndex
     ) const {
