@@ -286,7 +286,7 @@ private:
     FemGrid2D grid;
 
     /// KDTree which is used semi-Lagrangian solver is used.
-    TriangleKDTree kdTree;
+    KDTree kdTree;
 
     /// Mass matrix for the velocity formed by (fi_i, fi_j) : forall i, j in 0...numVelocityNodes - 1
     /// Where fi_i is the i-th velocity basis function. This matrix is the same for the u and v components of the velocity,
@@ -619,7 +619,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
     if(outPath != nullptr) {
         outFolder = outPath;
     }
-    TriangleKDTreeBuilder builder;
+    KDTreeBuilder builder;
     kdTree = builder.build(&grid);
     return EC::ErrorCode();
 

@@ -12,19 +12,19 @@ namespace NSFem {
         return a * a;
     }
 
-    TriangleKDTreeBuilder::TriangleKDTreeBuilder() :
+    KDTreeBuilder::KDTreeBuilder() :
         maxDepth(-1),
         minLeafSize(16)
     {}
 
-    TriangleKDTreeBuilder::TriangleKDTreeBuilder(int maxDepth, int minLeafSize) :
+    KDTreeBuilder::KDTreeBuilder(int maxDepth, int minLeafSize) :
         maxDepth(std::min(maxDepth, 29)),
         minLeafSize(minLeafSize)
     {}
 
-    TriangleKDTree TriangleKDTreeBuilder::build(FemGrid2D* grid) {
+    KDTree KDTreeBuilder::build(FemGrid2D* grid) {
         assert(grid != nullptr);
-        TriangleKDTree result;
+        KDTree result;
         result.grid = grid;
         result.bbox = grid->getBBox();
         // The formula for depth is taken from pbrt
@@ -36,7 +36,7 @@ namespace NSFem {
         return result;
     }
 
-    int TriangleKDTreeBuilder::build(
+    int KDTreeBuilder::build(
         FemGrid2D* grid,
         std::vector<int>& leafTriangleIndexes,
         std::vector<KDNode>& nodes,
@@ -92,11 +92,11 @@ namespace NSFem {
     	return build(grid, leafTriangleIndexes, nodes, rightIndexes, rightBoundingBox, newAxis, level + 1);
     }
 
-    TriangleKDTree::TriangleKDTree() :
+    KDTree::KDTree() :
         grid(nullptr)
     {}
 
-    int TriangleKDTree::findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
+    int KDTree::findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
         int currentNodeIndex = getRootIndex();
         KDNode currentNode = nodes[currentNodeIndex];
         SmallVector<TraversalStackEntry, 64> traversalStack;
@@ -199,7 +199,7 @@ namespace NSFem {
         return -1;
     }
 
-    void TriangleKDTree::nearestNeghbourProcessLeaf(
+    void KDTree::nearestNeghbourProcessLeaf(
         const Point2D& point,
         const KDNode& currentNode,
         real& minDistSq,

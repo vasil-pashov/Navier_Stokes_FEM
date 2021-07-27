@@ -7,15 +7,15 @@ namespace NSFem {
 
 class FemGrid2D;
 
-class TriangleKDTree {
+class KDTree {
 public:
-    friend class TriangleKDTreeBuilder;
+    friend class KDTreeBuilder;
     /// @brief Default constrict the tree with empty bounding box and no nodes.
-    TriangleKDTree();
-    TriangleKDTree(TriangleKDTree&&) = default;
-    TriangleKDTree& operator=(TriangleKDTree&&) = default;
-    TriangleKDTree(const TriangleKDTree&) = delete;
-    TriangleKDTree& operator=(const TriangleKDTree&) = delete;
+    KDTree();
+    KDTree(KDTree&&) = default;
+    KDTree& operator=(KDTree&&) = default;
+    KDTree(const KDTree&) = delete;
+    KDTree& operator=(const KDTree&) = delete;
     /// @brief Checks if a point lies inside any of the triangles in the grid.
     /// If so xi and eta will be set to the barrycentric coordinates of the point inside the triangle
     /// @param[in] point 2D point in world space which will be tested against the tree
@@ -33,7 +33,12 @@ private:
 
     /// Compare all of the points in the leaf and check if any of the points has distance to the
     /// given point less than minDistSq. If so update minDistSq and the index of the femNode in the mesh
-    void nearestNeghbourProcessLeaf(const Point2D& point, const KDNode& node, real& minDistSq, int& closestFEMNodeIndex) const;
+    void nearestNeghbourProcessLeaf(
+        const Point2D& point,
+        const KDNode& node,
+        real& minDistSq,
+        int& closestFEMNodeIndex
+    ) const;
 
     std::vector<KDNode> nodes;
     std::vector<int> leafTriangleIndexes;
@@ -41,11 +46,13 @@ private:
     FemGrid2D *grid;
 };
 
-class TriangleKDTreeBuilder {
+
+
+class KDTreeBuilder {
 public:
-    TriangleKDTreeBuilder();
-    TriangleKDTreeBuilder(int maxDepth, int minLeafSize);
-    TriangleKDTree build(FemGrid2D* grid);
+    KDTreeBuilder();
+    KDTreeBuilder(int maxDepth, int minLeafSize);
+    KDTree build(FemGrid2D* grid);
 private:
     int build(
         FemGrid2D* grid,
