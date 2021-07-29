@@ -10,9 +10,14 @@ public:
         nodes(nullptr),
         elements(nullptr)
     {}
-    device GPUFemGrid2D(const float* nodes, const int* elements) : 
+    device GPUFemGrid2D(
+        const float* nodes,
+        const int* elements,
+        int nodesCount
+    ) : 
         nodes(nodes),
-        elements(elements)
+        elements(elements),
+        nodesCount(nodesCount)
     {}
     device void getElement(const int elementIndex, int* outElement, NSFem::real* outNodes) const {
         for(int i = 0; i < elementSize; ++i) {
@@ -30,10 +35,14 @@ public:
     device NSFem::Point2D getNode(const int nodeIndex) const {
         return NSFem::Point2D(nodes[2 * nodeIndex], nodes[2 * nodeIndex + 1]);
     }
+    device int getNodesCount() const {
+        return nodesCount;
+    }
 private:
-    int elementSize = 6;
     const float* nodes;
     const int* elements;
+    int elementSize = 6;
+    int nodesCount;
 };
 }
 #endif

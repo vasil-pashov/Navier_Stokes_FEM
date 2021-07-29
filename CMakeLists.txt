@@ -68,7 +68,6 @@ set(HEADERS
 	include/error_code.h
 	include/timer.h
 	include/cmd_line_parser.h
-	include/small_vector.h
 	include/gpu_host_common.h
 	include/gpu_simulation_device.h
 	include/kd_tree_builder.h
@@ -79,6 +78,7 @@ set(HEADERS
 	gpu_cpu_shared/defines_common.cuh
 	gpu_cpu_shared/kd_tree.cuh
 	gpu_cpu_shared/gpu_grid.cuh
+	gpu_cpu_shared/small_vector.cuh
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})

@@ -54,7 +54,11 @@ EC::ErrorCode KDTreeCPUOwner::upload(KDTreeGPUOwner& ownerOut) const {
     RETURN_ON_ERROR_CODE(ownerOut.gridElements.init(gridElementsBufferSize));
     RETURN_ON_ERROR_CODE(ownerOut.gridElements.uploadBuffer(grid->getElementsBuffer(), gridElementsBufferSize));
 
-    ownerOut.grid = GPUSimulation::GPUFemGrid2D((float*)ownerOut.nodes.getHandle(),(int*)ownerOut.gridElements.getHandle());
+    ownerOut.grid = GPUSimulation::GPUFemGrid2D(
+        (float*)ownerOut.nodes.getHandle(),
+        (int*)ownerOut.gridElements.getHandle(),
+        grid->getNodesCount()
+    );
     return EC::ErrorCode();
 }
 

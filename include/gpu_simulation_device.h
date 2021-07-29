@@ -20,6 +20,6 @@ namespace GPUSimulation {
     class GPUSimulationDeviceManager : public GPU::GPUDeviceManagerBase<GPUSimulationDevice> {
     public:
         GPUSimulationDeviceManager();
-        EC::ErrorCode init();
+        EC::ErrorCode init(const NSFem::KDTreeCPUOwner& cpuOwner);
     };
 };

@@ -16,7 +16,7 @@ GPUSimulationDeviceManager::GPUSimulationDeviceManager() :
 
 }
 
-EC::ErrorCode GPUSimulationDeviceManager::init() {
+EC::ErrorCode GPUSimulationDeviceManager::init(const NSFem::KDTreeCPUOwner& cpuOwner) {
     EC::ErrorCode status = GPUDeviceManagerBase<GPUSimulationDevice>::initDevices();
     if(status.hasError()) {
         return status;
