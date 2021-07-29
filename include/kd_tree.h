@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <limits>
+#include "gpu_host_common.h"
 #include "kd_tree_common.cuh"
 
 namespace NSFem {
@@ -12,6 +13,12 @@ public:
     friend class KDTreeBuilder;
     /// @brief Default constrict the tree with empty bounding box and no nodes.
     KDTree();
+    KDTree(
+        BBox2D bbox,
+        const KDNode* nodes,
+        const int* leafTriangleIndexes,
+        const FemGrid2D* grid
+    );
     KDTree(KDTree&&) = default;
     KDTree& operator=(KDTree&&) = default;
     KDTree(const KDTree&) = delete;
@@ -40,20 +47,55 @@ private:
         int& closestFEMNodeIndex
     ) const;
 
-    std::vector<KDNode> nodes;
-    std::vector<int> leafTriangleIndexes;
     BBox2D bbox;
-    FemGrid2D *grid;
+    const KDNode* nodes;
+    const int* leafTriangleIndexes;
+    const FemGrid2D *grid;
 };
 
+class KDTreeGPUOwner {
+public:
+    friend class KDTreeCPUOwner;
+    KDTreeGPUOwner() = default;
+    KDTreeGPUOwner(KDTreeGPUOwner&&) = default;
+    KDTreeGPUOwner& operator=(KDTreeGPUOwner&&) = default;
+    KDTreeGPUOwner(const KDTreeGPUOwner&) = delete;
+    KDTreeGPUOwner& operator=(const KDTreeGPUOwner&) = delete;
+private:
+    GPU::GPUBuffer nodes;
+    GPU::GPUBuffer leafTriangleIndexes;
+    GPU::GPUBuffer gridNodes;
+    GPU::GPUBuffer gridElements;
+};
 
+class KDTreeCPUOwner {
+public:
+    friend class KDTreeBuilder;
+    KDTreeCPUOwner() = default;
+    KDTreeCPUOwner(KDTreeCPUOwner&&) = default;
+    KDTreeCPUOwner& operator=(KDTreeCPUOwner&&) = default;
+    KDTreeCPUOwner(const KDTreeCPUOwner&) = delete;
+    KDTreeCPUOwner& operator=(const KDTreeCPUOwner&) = delete;
+    KDTree getTree() const;
+    EC::ErrorCode upload(KDTreeGPUOwner& ownerOut);
+protected:
+    std::vector<KDNode> nodes;
+    std::vector<int> leafTriangleIndexes;
+    FemGrid2D* grid;
+    BBox2D treeBBox;
+};
 
 class KDTreeBuilder {
 public:
     KDTreeBuilder();
     KDTreeBuilder(int maxDepth, int minLeafSize);
-    KDTree build(FemGrid2D* grid);
+    KDTreeCPUOwner buildCPUOwner(FemGrid2D* grid);
 private:
+    void build(
+        FemGrid2D* grid,
+        std::vector<int>& leafTriangleIndexes,
+        std::vector<KDNode>& nodes
+    );
     int build(
         FemGrid2D* grid,
         std::vector<int>& leafTriangleIndexes,

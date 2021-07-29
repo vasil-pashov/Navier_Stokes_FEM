@@ -286,7 +286,7 @@ private:
     FemGrid2D grid;
 
     /// KDTree which is used semi-Lagrangian solver is used.
-    KDTree kdTree;
+    KDTreeCPUOwner kdTreeCPUOwner;
 
     /// Mass matrix for the velocity formed by (fi_i, fi_j) : forall i, j in 0...numVelocityNodes - 1
     /// Where fi_i is the i-th velocity basis function. This matrix is the same for the u and v components of the velocity,
@@ -620,7 +620,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
         outFolder = outPath;
     }
     KDTreeBuilder builder;
-    kdTree = builder.build(&grid);
+    kdTreeCPUOwner = builder.buildCPUOwner(&grid);
     return EC::ErrorCode();
 
 }
@@ -1413,7 +1413,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
             real xi, eta;
             // If start does not lie in any triangle this will be the index of the nearest node to start
             int nearestNeighbour;
-            const int element = kdTree.findElement(start, xi, eta, nearestNeighbour);
+            const int element = kdTreeCPUOwner.getTree().findElement(start, xi, eta, nearestNeighbour);
             if(element > -1) {
                 // Start point lies in an element, interpolate it by using the shape functions.
                 // This is possible because xi and eta do not change when the element is transformed

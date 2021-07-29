@@ -22,18 +22,57 @@ namespace NSFem {
         minLeafSize(minLeafSize)
     {}
 
-    KDTree KDTreeBuilder::build(FemGrid2D* grid) {
+    KDTreeCPUOwner KDTreeBuilder::buildCPUOwner(FemGrid2D* grid) {
         assert(grid != nullptr);
-        KDTree result;
-        result.grid = grid;
-        result.bbox = grid->getBBox();
+        KDTreeCPUOwner owner;
+        build(grid, owner.leafTriangleIndexes, owner.nodes);
+        owner.grid = grid;
+        owner.treeBBox = grid->getBBox();
+        owner.grid = grid;
+        return owner;
+    }
+
+    KDTree KDTreeCPUOwner::getTree() const {
+        return KDTree(
+            treeBBox,
+            nodes.data(),
+            leafTriangleIndexes.data(),
+            grid
+        );
+    }
+
+    EC::ErrorCode KDTreeCPUOwner::upload(KDTreeGPUOwner& ownerOut) {
+        assert(grid->getElementSize() == 6);
+        const int64_t nodesSize = sizeof(decltype(nodes)::value_type) * nodes.size();
+        const int64_t indicesSize = sizeof(decltype(leafTriangleIndexes)::value_type) * leafTriangleIndexes.size();
+        const int64_t gridNodesBufferSize = sizeof(float) * 2 * grid->getNodesCount();
+        const int64_t gridElementsBufferSize = sizeof(int) * grid->getElementSize() * grid->getElementsCount();
+
+        RETURN_ON_ERROR_CODE(ownerOut.nodes.init(nodesSize));
+        RETURN_ON_ERROR_CODE(ownerOut.nodes.uploadBuffer(nodes.data(), nodesSize));
+
+        RETURN_ON_ERROR_CODE(ownerOut.leafTriangleIndexes.init(indicesSize));
+        RETURN_ON_ERROR_CODE(ownerOut.leafTriangleIndexes.uploadBuffer(leafTriangleIndexes.data(), indicesSize));
+
+        RETURN_ON_ERROR_CODE(ownerOut.gridNodes.init(gridNodesBufferSize));
+        RETURN_ON_ERROR_CODE(ownerOut.gridNodes.uploadBuffer(grid->getNodesBuffer(), gridNodesBufferSize));
+
+        RETURN_ON_ERROR_CODE(ownerOut.gridElements.init(gridElementsBufferSize));
+        RETURN_ON_ERROR_CODE(ownerOut.gridElements.uploadBuffer(grid->getElementsBuffer(), gridElementsBufferSize));
+        return EC::ErrorCode();
+    }
+
+    void KDTreeBuilder::build(
+        FemGrid2D* grid,
+        std::vector<int>& leafTriangleIndexes,
+        std::vector<KDNode>& nodes
+    ) {
         // The formula for depth is taken from pbrt
         maxDepth = maxDepth > -1 ? maxDepth : std::min(29, (int)std::round(8 + 1.3f * std::log(grid->getElementsCount())));
         assert(grid->getElementSize() == 6);
         std::vector<int> indices(grid->getElementsCount());
         std::iota(indices.begin(), indices.end(), 0);
-        build(grid, result.leafTriangleIndexes, result.nodes, indices, result.bbox, 0, 0);
-        return result;
+        build(grid, leafTriangleIndexes, nodes, indices, grid->getBBox(), 0, 0);
     }
 
     int KDTreeBuilder::build(
@@ -95,6 +134,19 @@ namespace NSFem {
     KDTree::KDTree() :
         grid(nullptr)
     {}
+
+    KDTree::KDTree(
+        BBox2D bbox,
+        const KDNode* nodes,
+        const int* leafTriangleIndexes,
+        const FemGrid2D* grid
+    ) :
+        bbox(bbox),
+        nodes(nodes),
+        leafTriangleIndexes(leafTriangleIndexes),
+        grid(grid)
+    {}
+
 
     int KDTree::findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
         int currentNodeIndex = getRootIndex();
