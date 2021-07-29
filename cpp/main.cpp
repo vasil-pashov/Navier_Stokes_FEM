@@ -127,24 +127,6 @@ int main(int nargs, char** cargs) {
     }();
     tbb::global_control tbbMaxThreadsControl(tbb::global_control::max_allowed_parallelism, numThreads);
 
-    {
-        GPUSimulation::GPUSimulationDeviceManager devman;
-        EC::ErrorCode ec = devman.init();
-        
-        const int size = 2000;
-        std::vector<float> x(size), y(size), z(size);
-        const float alpha = 2.3;
-        for(int i = 0; i < size; ++i) {
-            x[i] = i;
-            y[i] = size + i;
-            z[i] = y[i];
-        }
-        devman.getDevice(0).saxpyTest(alpha, x.data(), y.data(), size);
-        for(int i = 0; i < size; ++i) {
-            printf("Expected: %f, result: %f\n", alpha * x[i] + z[i], y[i]);
-        }
-    }
-
     NSFem::NavierStokesAssembly<NSFem::P2, NSFem::P1> assembler;
     error = assembler.init(
         argParse.getStringVal("sceneFile"),

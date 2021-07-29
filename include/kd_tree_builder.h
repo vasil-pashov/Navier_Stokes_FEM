@@ -1,11 +1,12 @@
 #pragma once
 #include "gpu_host_common.h"
 #include "kd_tree_common.cuh"
+#include "kd_tree.cuh"
+#include "gpu_grid.cuh"
 
 namespace NSFem {
 
 class FemGrid2D;
-class KDTree;
 
 class KDTreeGPUOwner {
 public:
@@ -15,11 +16,15 @@ public:
     KDTreeGPUOwner& operator=(KDTreeGPUOwner&&) = default;
     KDTreeGPUOwner(const KDTreeGPUOwner&) = delete;
     KDTreeGPUOwner& operator=(const KDTreeGPUOwner&) = delete;
+    KDTree<GPUSimulation::GPUFemGrid2D> getTree() const;
+    GPUSimulation::GPUFemGrid2D getGrid() const;
 private:
     GPU::GPUBuffer nodes;
     GPU::GPUBuffer leafTriangleIndexes;
     GPU::GPUBuffer gridNodes;
     GPU::GPUBuffer gridElements;
+    GPUSimulation::GPUFemGrid2D grid;
+    BBox2D treeBBox;
 };
 
 class KDTreeCPUOwner {
@@ -30,8 +35,8 @@ public:
     KDTreeCPUOwner& operator=(KDTreeCPUOwner&&) = default;
     KDTreeCPUOwner(const KDTreeCPUOwner&) = delete;
     KDTreeCPUOwner& operator=(const KDTreeCPUOwner&) = delete;
-    KDTree getTree() const;
-    EC::ErrorCode upload(KDTreeGPUOwner& ownerOut);
+    KDTree<FemGrid2D> getTree() const;
+    EC::ErrorCode upload(KDTreeGPUOwner& ownerOut) const;
 protected:
     std::vector<KDNode> nodes;
     std::vector<int> leafTriangleIndexes;

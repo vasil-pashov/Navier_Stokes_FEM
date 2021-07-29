@@ -54,7 +54,6 @@ set(CPP
 	cpp/expression.cpp
 	cpp/error_code.cpp
 	cpp/assembly.cpp
-	cpp/kd_tree.cpp
 	cpp/cmd_line_parser.cpp
 	cpp/gpu_host_common.cpp
 	cpp/gpu_simulation_device.cpp
@@ -67,7 +66,6 @@ set(HEADERS
 	include/static_matrix.h
 	include/expression.h
 	include/error_code.h
-	include/kd_tree.h
 	include/timer.h
 	include/cmd_line_parser.h
 	include/small_vector.h
@@ -79,6 +77,8 @@ set(HEADERS
 	gpu_cpu_shared/kd_tree_common.cuh
 	gpu_cpu_shared/misc_common.cuh
 	gpu_cpu_shared/defines_common.cuh
+	gpu_cpu_shared/kd_tree.cuh
+	gpu_cpu_shared/gpu_grid.cuh
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})

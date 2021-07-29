@@ -4,7 +4,7 @@
 #include <grid.h>
 #include "error_code.h"
 #include "static_matrix.h"
-#include "kd_tree.h"
+#include "kd_tree.cuh"
 #include <string>
 #include <nlohmann/json.hpp>
 #include <opencv2/imgproc.hpp>
@@ -13,6 +13,7 @@
 #include "tbb/parallel_for.h"
 #include "tbb/task_group.h"
 #include "kd_tree_builder.h"
+#include "gpu_simulation_device.h"
 
 namespace NSFem {
 
@@ -283,6 +284,12 @@ private:
         U,
         V
     };
+
+    /// A Device manager which owns all GPU devices which will be used for simulation purposes.
+    /// It loads the simulation kernels for each device and is used to call each kernel.
+    /// @note Multi device simulation is not supported at this moment.
+    GPUSimulation::GPUSimulationDeviceManager gpuDevman;
+
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
 

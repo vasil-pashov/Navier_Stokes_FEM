@@ -1,6 +1,6 @@
 #include "kd_tree_builder.h"
 #include "grid.h"
-#include "kd_tree.h"
+#include "kd_tree.cuh"
 
 namespace NSFem {
 
@@ -24,8 +24,8 @@ KDTreeCPUOwner KDTreeBuilder::buildCPUOwner(FemGrid2D* grid) {
     return owner;
 }
 
-KDTree KDTreeCPUOwner::getTree() const {
-    return KDTree(
+KDTree<FemGrid2D> KDTreeCPUOwner::getTree() const {
+    return KDTree<FemGrid2D>(
         treeBBox,
         nodes.data(),
         leafTriangleIndexes.data(),
@@ -33,12 +33,14 @@ KDTree KDTreeCPUOwner::getTree() const {
     );
 }
 
-EC::ErrorCode KDTreeCPUOwner::upload(KDTreeGPUOwner& ownerOut) {
+EC::ErrorCode KDTreeCPUOwner::upload(KDTreeGPUOwner& ownerOut) const {
     assert(grid->getElementSize() == 6);
     const int64_t nodesSize = sizeof(decltype(nodes)::value_type) * nodes.size();
     const int64_t indicesSize = sizeof(decltype(leafTriangleIndexes)::value_type) * leafTriangleIndexes.size();
     const int64_t gridNodesBufferSize = sizeof(float) * 2 * grid->getNodesCount();
     const int64_t gridElementsBufferSize = sizeof(int) * grid->getElementSize() * grid->getElementsCount();
+
+    ownerOut.treeBBox = treeBBox;
 
     RETURN_ON_ERROR_CODE(ownerOut.nodes.init(nodesSize));
     RETURN_ON_ERROR_CODE(ownerOut.nodes.uploadBuffer(nodes.data(), nodesSize));
@@ -51,7 +53,19 @@ EC::ErrorCode KDTreeCPUOwner::upload(KDTreeGPUOwner& ownerOut) {
 
     RETURN_ON_ERROR_CODE(ownerOut.gridElements.init(gridElementsBufferSize));
     RETURN_ON_ERROR_CODE(ownerOut.gridElements.uploadBuffer(grid->getElementsBuffer(), gridElementsBufferSize));
+
+    ownerOut.grid = GPUSimulation::GPUFemGrid2D((float*)ownerOut.nodes.getHandle(),(int*)ownerOut.gridElements.getHandle());
     return EC::ErrorCode();
+}
+
+KDTree<GPUSimulation::GPUFemGrid2D> KDTreeGPUOwner::getTree() const {
+    
+    return KDTree<GPUSimulation::GPUFemGrid2D>(
+        treeBBox,
+        (KDNode*)nodes.getHandle(),
+        (int*)leafTriangleIndexes.getHandle(),
+        &grid
+    );
 }
 
 void KDTreeBuilder::build(
