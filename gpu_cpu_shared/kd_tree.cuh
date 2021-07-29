@@ -10,7 +10,7 @@ namespace NSFem {
 class FemGrid2D;
 
 template<typename T>
-device inline T square(T a) {
+DEVICE inline T square(T a) {
     return a * a;
 }
 
@@ -20,17 +20,17 @@ class KDTree {
 public:
     friend class KDTreeBuilder;
     /// @brief Default constrict the tree with empty bounding box and no nodes.
-    KDTree();
-    KDTree(
+    DEVICE KDTree();
+    DEVICE KDTree(
         BBox2D bbox,
         const KDNode* nodes,
         const int* leafTriangleIndexes,
         const Grid* grid
     );
-    KDTree(KDTree&&) = default;
-    KDTree& operator=(KDTree&&) = default;
-    KDTree(const KDTree&) = delete;
-    KDTree& operator=(const KDTree&) = delete;
+    DEVICE KDTree(KDTree&&) = default;
+    DEVICE KDTree& operator=(KDTree&&) = default;
+    DEVICE KDTree(const KDTree&) = delete;
+    DEVICE KDTree& operator=(const KDTree&) = delete;
     /// @brief Checks if a point lies inside any of the triangles in the grid.
     /// If so xi and eta will be set to the barrycentric coordinates of the point inside the triangle
     /// @param[in] point 2D point in world space which will be tested against the tree
@@ -40,7 +40,7 @@ public:
     /// of the closest point of the grid to the given one
     /// @retval -1 if the point does not lie inside a triangle, otherwise the index of the element where
     /// the point lies 
-    device int findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
+    DEVICE int findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
         int currentNodeIndex = getRootIndex();
         KDNode currentNode = nodes[currentNodeIndex];
         SmallVector<TraversalStackEntry, 32> traversalStack;
@@ -143,13 +143,13 @@ public:
         return -1;
     }
 private:
-    device int getRootIndex() const {
+    DEVICE int getRootIndex() const {
         return 0;
     }
 
     /// Compare all of the points in the leaf and check if any of the points has distance to the
     /// given point less than minDistSq. If so update minDistSq and the index of the femNode in the mesh
-    device void nearestNeghbourProcessLeaf(
+    DEVICE void nearestNeghbourProcessLeaf(
         const Point2D& point,
         const KDNode& currentNode,
         real& minDistSq,
@@ -178,12 +178,12 @@ private:
 };
 
 template<typename Grid>
-KDTree<Grid>::KDTree() :
+DEVICE KDTree<Grid>::KDTree() :
     grid(nullptr)
 {}
 
 template<typename Grid>
-KDTree<Grid>::KDTree(
+DEVICE KDTree<Grid>::KDTree(
     BBox2D bbox,
     const KDNode* nodes,
     const int* leafTriangleIndexes,

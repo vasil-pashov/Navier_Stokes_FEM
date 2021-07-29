@@ -23,11 +23,12 @@ extern "C" __global__ void advect(
   const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
   if(i >= grid.getNodesCount()) return;
   const int elementSize = 6;
-  NSFem::Point2D elementNodes[elementSize];
-  int elementIndexes[elementSize];
   const NSFem::Point2D position = grid.getNode(i);
   const NSFem::Point2D velocity(uVelocity[i], vVelocity[i]);
   const NSFem::Point2D start = position - velocity * dt;
+
+  NSFem::Point2D elementNodes[elementSize];
+  int elementIndexes[elementSize];
 
   // If start is inside some element xi and eta will be the barrycentric coordinates
   // of start inside that element.

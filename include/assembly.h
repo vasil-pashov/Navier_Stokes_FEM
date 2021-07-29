@@ -629,6 +629,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
     }
     KDTreeBuilder builder;
     kdTreeCPUOwner = builder.buildCPUOwner(&grid);
+    RETURN_ON_ERROR_CODE(gpuDevman.init(kdTreeCPUOwner));
     return EC::ErrorCode();
 
 }
@@ -1395,6 +1396,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatri
     out.init(triplet);
 }
 
+#define GPU
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     const real* const uVelocity,
@@ -1403,6 +1405,22 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     real* const vVelocityOut
 ) {
     const int velocityNodesCount = grid.getNodesCount();
+#ifdef GPU
+    const EC::ErrorCode status = gpuDevman.getDevice(0).advect(
+        velocityNodesCount,
+        uVelocity,
+        vVelocity,
+        dt,
+        uVelocityOut,
+        vVelocityOut
+    );
+    if(status.hasError()) {
+        fprintf(stderr, "%s\n", status.getMessage());
+        assert(false);
+        exit(1);
+    }
+#else
+    
     const real* velocityNodes = grid.getNodesBuffer();
     
     static_assert(VelocityShape::size == 6, "Only P2-P1 elements are supported");
@@ -1444,6 +1462,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
             }
         }
     });
+#endif
 }
 
 }

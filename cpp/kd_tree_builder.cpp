@@ -66,10 +66,14 @@ KDTree<GPUSimulation::GPUFemGrid2D> KDTreeGPUOwner::getTree() const {
     
     return KDTree<GPUSimulation::GPUFemGrid2D>(
         treeBBox,
-        (KDNode*)nodes.getHandle(),
-        (int*)leafTriangleIndexes.getHandle(),
+        (KDNode*)&nodes.getHandle(),
+        (int*)&leafTriangleIndexes.getHandle(),
         &grid
     );
+}
+
+GPUSimulation::GPUFemGrid2D KDTreeGPUOwner::getGrid() const {
+    return grid;
 }
 
 void KDTreeBuilder::build(

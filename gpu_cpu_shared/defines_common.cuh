@@ -2,9 +2,9 @@
 #define GPU_CPU_DEFINES_H
 
 #ifdef __CUDACC__
-    #define device __device__
+    #define DEVICE __device__
 #else
-    #define device
+    #define DEVICE
 #endif
 
 #endif
