@@ -59,6 +59,8 @@ EC::ErrorCode KDTreeCPUOwner::upload(KDTreeGPUOwner& ownerOut) const {
         (int*)ownerOut.gridElements.getHandle(),
         grid->getNodesCount()
     );
+    RETURN_ON_ERROR_CODE(ownerOut.gridPtr.init(sizeof(GPUSimulation::GPUFemGrid2D)));
+    RETURN_ON_ERROR_CODE(ownerOut.gridPtr.uploadBuffer(&grid, sizeof(GPUSimulation::GPUFemGrid2D)));
     return EC::ErrorCode();
 }
 
@@ -66,9 +68,9 @@ KDTree<GPUSimulation::GPUFemGrid2D> KDTreeGPUOwner::getTree() const {
     
     return KDTree<GPUSimulation::GPUFemGrid2D>(
         treeBBox,
-        (KDNode*)&nodes.getHandle(),
-        (int*)&leafTriangleIndexes.getHandle(),
-        &grid
+        (KDNode*)nodes.getHandle(),
+        (int*)leafTriangleIndexes.getHandle(),
+        (GPUSimulation::GPUFemGrid2D*)gridPtr.getHandle()
     );
 }
 

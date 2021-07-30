@@ -23,6 +23,7 @@ private:
     GPU::GPUBuffer leafTriangleIndexes;
     GPU::GPUBuffer gridNodes;
     GPU::GPUBuffer gridElements;
+    GPU::GPUBuffer gridPtr;
     GPUSimulation::GPUFemGrid2D grid;
     BBox2D treeBBox;
 };

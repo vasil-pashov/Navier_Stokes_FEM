@@ -40,7 +40,7 @@ public:
     /// of the closest point of the grid to the given one
     /// @retval -1 if the point does not lie inside a triangle, otherwise the index of the element where
     /// the point lies 
-    DEVICE int findElement(const Point2D& point, real& xi, real& eta, int& closestFEMNodeIndex) const {
+    DEVICE int findElement(const Point2D& point, float& xi, float& eta, int& closestFEMNodeIndex) const {
         int currentNodeIndex = getRootIndex();
         KDNode currentNode = nodes[currentNodeIndex];
         SmallVector<TraversalStackEntry, 32> traversalStack;
@@ -49,7 +49,7 @@ public:
         // and there is no need to descend to the "far" child
         while(!currentNode.isLeaf()) {
             const int axis = currentNode.getAxis();
-            const real splitPoint = currentNode.getSplitPoint();
+            const float splitPoint = currentNode.getSplitPoint();
             const int childIndex = (point[axis] <= splitPoint) * (currentNodeIndex + 1) +
                 (point[axis] > splitPoint) * currentNode.getRightChildIndex();
             traversalStack.emplaceBack(currentNodeIndex, 1);
@@ -76,7 +76,7 @@ public:
         // a point which is in another node and is closer to the one in this leaf.
         // 2) Go upwards the recursion stack. For each node check if the distance between the point and the
         // splitting plane is less than the minimal distance found. If so the other node must traversed too.
-        real minDistSq = std::numeric_limits<real>::infinity();
+        float minDistSq = std::numeric_limits<float>::max();
         assert(grid->getElementSize() == 6);
         while(!traversalStack.empty()) {
             const TraversalStackEntry& stackEntry = traversalStack.back();
@@ -99,7 +99,7 @@ public:
                 const int activeNodeIndex = traversalStack.back().getNode();
                 const KDNode& activeNode = nodes[activeNodeIndex];
                 const int axis = activeNode.getAxis();
-                const real splitPoint = activeNode.getSplitPoint();
+                const float splitPoint = activeNode.getSplitPoint();
                 if(traversalStack.back().getVisitCount() == 0) {
                     // The node on the top of the stack did not descent to neighter of its children
                     // We must always go down to the child which is on the same side of the splitting plane
@@ -121,7 +121,7 @@ public:
                     // be traversed too. We need to traverse "the far" child if the distance between the splitting
                     // plane is less than the current minimal distance.
     
-                    const real distToSplitSq = square(point[axis] - splitPoint);
+                    const float distToSplitSq = square(point[axis] - splitPoint);
                     if(distToSplitSq < minDistSq) {
                         // We must traverse the "far" child. In order to find it we check of which side of the splitting
                         // plane our point is and take the other.
@@ -152,7 +152,7 @@ private:
     DEVICE void nearestNeghbourProcessLeaf(
         const Point2D& point,
         const KDNode& currentNode,
-        real& minDistSq,
+        float& minDistSq,
         int& closestFEMNodeIndex
     ) const {
         Point2D femNodes[6];
@@ -160,9 +160,9 @@ private:
         const int elementOffset = currentNode.getTriangleOffset();
         for(int i = 0; i < currentNode.getNumTrianges(); ++i) {
             const int finiteElementIndex = leafTriangleIndexes[elementOffset + i];
-            grid->getElement(finiteElementIndex, femIndices, reinterpret_cast<real*>(femNodes));
+            grid->getElement(finiteElementIndex, femIndices, reinterpret_cast<float*>(femNodes));
             for(int j = 0; j < 6; ++j) {
-                const real newDistSq = point.distToSq(femNodes[j]);
+                const float newDistSq = point.distToSq(femNodes[j]);
                 if(newDistSq < minDistSq) {
                     minDistSq = newDistSq;
                     closestFEMNodeIndex = femIndices[j];
