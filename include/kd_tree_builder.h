@@ -19,7 +19,7 @@ public:
     KDTree<GPUSimulation::GPUFemGrid2D> getTree() const;
     GPUSimulation::GPUFemGrid2D getGrid() const;
 private:
-    GPU::GPUBuffer nodes;
+    GPU::GPUBuffer treeNodes;
     GPU::GPUBuffer leafTriangleIndexes;
     GPU::GPUBuffer gridNodes;
     GPU::GPUBuffer gridElements;

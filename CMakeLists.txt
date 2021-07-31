@@ -188,7 +188,9 @@ set_target_properties(gpu_sim
 target_compile_options(gpu_sim
 	PRIVATE
 		$<$<COMPILE_LANGUAGE:CUDA>:
-		-fcuda-rdc>)
+		#-fcuda-rdc
+		-ffp-contract=fast
+		>)
 
 add_dependencies(${PROJECT_NAME} gpu_sim)
 

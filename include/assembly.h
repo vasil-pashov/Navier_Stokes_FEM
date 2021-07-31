@@ -13,7 +13,12 @@
 #include "tbb/parallel_for.h"
 #include "tbb/task_group.h"
 #include "kd_tree_builder.h"
+
+#define GPU_SIMULATION
+
+#ifdef GPU_SIMULATION
 #include "gpu_simulation_device.h"
+#endif
 
 namespace NSFem {
 
@@ -285,10 +290,12 @@ private:
         V
     };
 
+#ifdef GPU_SIMULATION
     /// A Device manager which owns all GPU devices which will be used for simulation purposes.
     /// It loads the simulation kernels for each device and is used to call each kernel.
     /// @note Multi device simulation is not supported at this moment.
     GPUSimulation::GPUSimulationDeviceManager gpuDevman;
+#endif
 
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
@@ -629,7 +636,9 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
     }
     KDTreeBuilder builder;
     kdTreeCPUOwner = builder.buildCPUOwner(&grid);
+#ifdef GPU_SIMULATION
     RETURN_ON_ERROR_CODE(gpuDevman.init(kdTreeCPUOwner));
+#endif
     return EC::ErrorCode();
 
 }
@@ -1396,7 +1405,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatri
     out.init(triplet);
 }
 
-#define GPU
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     const real* const uVelocity,
@@ -1405,7 +1413,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     real* const vVelocityOut
 ) {
     const int velocityNodesCount = grid.getNodesCount();
-#ifdef GPU
+#ifdef GPU_SIMULATION
     const EC::ErrorCode status = gpuDevman.getDevice(0).advect(
         velocityNodesCount,
         uVelocity,

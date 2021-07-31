@@ -42,8 +42,8 @@ EC::ErrorCode KDTreeCPUOwner::upload(KDTreeGPUOwner& ownerOut) const {
 
     ownerOut.treeBBox = treeBBox;
 
-    RETURN_ON_ERROR_CODE(ownerOut.nodes.init(nodesSize));
-    RETURN_ON_ERROR_CODE(ownerOut.nodes.uploadBuffer(nodes.data(), nodesSize));
+    RETURN_ON_ERROR_CODE(ownerOut.treeNodes.init(nodesSize));
+    RETURN_ON_ERROR_CODE(ownerOut.treeNodes.uploadBuffer(nodes.data(), nodesSize));
 
     RETURN_ON_ERROR_CODE(ownerOut.leafTriangleIndexes.init(indicesSize));
     RETURN_ON_ERROR_CODE(ownerOut.leafTriangleIndexes.uploadBuffer(leafTriangleIndexes.data(), indicesSize));
@@ -55,12 +55,12 @@ EC::ErrorCode KDTreeCPUOwner::upload(KDTreeGPUOwner& ownerOut) const {
     RETURN_ON_ERROR_CODE(ownerOut.gridElements.uploadBuffer(grid->getElementsBuffer(), gridElementsBufferSize));
 
     ownerOut.grid = GPUSimulation::GPUFemGrid2D(
-        (float*)ownerOut.nodes.getHandle(),
+        (float*)ownerOut.gridNodes.getHandle(),
         (int*)ownerOut.gridElements.getHandle(),
         grid->getNodesCount()
     );
     RETURN_ON_ERROR_CODE(ownerOut.gridPtr.init(sizeof(GPUSimulation::GPUFemGrid2D)));
-    RETURN_ON_ERROR_CODE(ownerOut.gridPtr.uploadBuffer(&grid, sizeof(GPUSimulation::GPUFemGrid2D)));
+    RETURN_ON_ERROR_CODE(ownerOut.gridPtr.uploadBuffer(&ownerOut.grid, sizeof(GPUSimulation::GPUFemGrid2D)));
     return EC::ErrorCode();
 }
 
@@ -68,7 +68,7 @@ KDTree<GPUSimulation::GPUFemGrid2D> KDTreeGPUOwner::getTree() const {
     
     return KDTree<GPUSimulation::GPUFemGrid2D>(
         treeBBox,
-        (KDNode*)nodes.getHandle(),
+        (KDNode*)treeNodes.getHandle(),
         (int*)leafTriangleIndexes.getHandle(),
         (GPUSimulation::GPUFemGrid2D*)gridPtr.getHandle()
     );
