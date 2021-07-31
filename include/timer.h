@@ -61,7 +61,7 @@ namespace Profiling {
     #define PROFILING_SCOPED_TIMER_FUN() Profiling::ScopedTimer _PROFILING_COMBINE_NAME(__scopedTimer, __LINE__)(TIMER_FUNCTION_NAME);
     // concatiname with empty string literal to assure that ARG is string literal
     #define _PROFILING_SCOPED_TIMER_CUSTOM_HELPER(ARG) ARG ""
-    #define PROFILING_SCOPED_TIMER_CUSTOM(ARG) Profiling::ScopedTimer _PROFILING_COMBINE_NAME(__scopedTimer, __LINE__)(PROFILING_SCOPED_TIMER_CUSTOM_HELPER(ARG));
+    #define PROFILING_SCOPED_TIMER_CUSTOM(ARG) Profiling::ScopedTimer _PROFILING_COMBINE_NAME(__scopedTimer, __LINE__)(_PROFILING_SCOPED_TIMER_CUSTOM_HELPER(ARG));
 #else
     #define PROFILING_SCOPED_TIMER_FUN()
     #define PROFILING_SCOPED_TIMER_CUSTOM(ARG) 

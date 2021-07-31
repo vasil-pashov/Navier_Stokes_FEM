@@ -1034,25 +1034,32 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
     PROFILING_SCOPED_TIMER_FUN()
 
-    SMM::TripletMatrix<real> triplet;
-    SMM::TripletMatrix<real> dirichletWeightsTriplet;
-    std::unordered_set<int> allBoundaryNodes;
-    
+    tbb::task_group g;
     
     // ======================================================================
     // ====================== ASSEMBLE VELOCITY MASS ========================
     // ======================================================================
 
-    triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
     LocalMassFunctor<VelocityShape> localVelocityMass;
-    assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
-    velocityMassMatrix.init(triplet);
-    triplet.deinit();
+    SMM::CSRMatrix<real>::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
+    g.run([&](){
+        SMM::TripletMatrix<real> triplet;
+        {
+            PROFILING_SCOPED_TIMER_CUSTOM("Build velocity mass matrix");
+            triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+            assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
+            velocityMassMatrix.init(triplet);
+        }
+        {
+            PROFILING_SCOPED_TIMER_CUSTOM("Build velocity mass matrix preconditioner");
+            [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
+            assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
+        }
+    });
 
     // =====================================================================
     // =================== ASSEMBLE DIFFUSION MATRIX =======================
     // =====================================================================
-
     LocalStiffnessFunctor<VelocityShape> localVelocityStiffness;
     const auto diffusionMatrixLocal = [&localVelocityMass, &localVelocityStiffness, this](
         [[maybe_unused]]const int* elementIndexes,
@@ -1067,60 +1074,95 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         localMatrixOut += stiffness * dt * viscosity;
     };
 
-    collectBoundaryNodes(grid.getVelocityDirichletBegin(), grid.getVelocityDirichletEnd(), allBoundaryNodes);
-    triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
-    dirichletWeightsTriplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
     SMM::CSRMatrix<real> diffusionMatrix;
-    assembleBCMatrix<VelocityShape::size, VelocityShape::size>(
-        diffusionMatrixLocal,
-        allBoundaryNodes,
-        triplet,
-        dirichletWeightsTriplet
-    );
-    diffusionMatrix.init(triplet);
-
+    SMM::CSRMatrix<real>::IC0Preconditioner diffusionIC0(diffusionMatrix);
     SMM::CSRMatrix<real> velocityDirichletWeights;
-    velocityDirichletWeights.init(dirichletWeightsTriplet);
+    g.run([&](){
+        SMM::TripletMatrix<real> triplet;
+        std::unordered_set<int> allBoundaryNodes;
+        SMM::TripletMatrix<real> dirichletWeightsTriplet;
+        {
+            PROFILING_SCOPED_TIMER_CUSTOM("Build diffusion matrix");
+            collectBoundaryNodes(grid.getVelocityDirichletBegin(), grid.getVelocityDirichletEnd(), allBoundaryNodes);
+            triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+            dirichletWeightsTriplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
+            assembleBCMatrix<VelocityShape::size, VelocityShape::size>(
+                diffusionMatrixLocal,
+                allBoundaryNodes,
+                triplet,
+                dirichletWeightsTriplet
+            );
+            diffusionMatrix.init(triplet);
 
-    triplet.deinit();
-    dirichletWeightsTriplet.deinit();
-    allBoundaryNodes.clear();
+            velocityDirichletWeights.init(dirichletWeightsTriplet);    
+        }
+        {
+            PROFILING_SCOPED_TIMER_CUSTOM("Build diffusion matrix preconditioner");
+            [[maybe_unused]]const int preconditionError = diffusionIC0.init();
+            assert(preconditionError == 0 && "Failed to precondition the diffusion matrix. It should be SPD");
+        }
+        
+    });
 
     // ======================================================================
     // ==================== ASSEMBLE PRESSURE STIFFNESS =====================
     // ======================================================================
 
-    collectBoundaryNodes(grid.getPressureDirichletBegin(), grid.getPressureDirichletEnd(), allBoundaryNodes);  
-    triplet.init(grid.getPressureNodesCount(), grid.getPressureNodesCount(), -1);
-    dirichletWeightsTriplet.init(grid.getPressureNodesCount(), grid.getPressureNodesCount(), -1);
-    LocalStiffnessFunctor<PressureShape> localPressureStuffness;
-    assembleBCMatrix<PressureShape::size, PressureShape::size>(
-        localPressureStuffness,
-        allBoundaryNodes,
-        triplet,
-        dirichletWeightsTriplet
-    );
-    pressureStiffnessMatrix.init(triplet);
-
     SMM::CSRMatrix<real> pressureDirichletWeights;
-    pressureDirichletWeights.init(dirichletWeightsTriplet);
+    SMM::CSRMatrix<real>::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
+    g.run([&](){
+        SMM::TripletMatrix<real> triplet;
+        std::unordered_set<int> allBoundaryNodes;
+        SMM::TripletMatrix<real> dirichletWeightsTriplet;
+        {
+            PROFILING_SCOPED_TIMER_CUSTOM("Build pressure stiffness matrix");
+            collectBoundaryNodes(grid.getPressureDirichletBegin(), grid.getPressureDirichletEnd(), allBoundaryNodes);  
+            triplet.init(grid.getPressureNodesCount(), grid.getPressureNodesCount(), -1);
+            dirichletWeightsTriplet.init(grid.getPressureNodesCount(), grid.getPressureNodesCount(), -1);
+            LocalStiffnessFunctor<PressureShape> localPressureStuffness;
+            assembleBCMatrix<PressureShape::size, PressureShape::size>(
+                localPressureStuffness,
+                allBoundaryNodes,
+                triplet,
+                dirichletWeightsTriplet
+            );
+            pressureStiffnessMatrix.init(triplet);
+            pressureDirichletWeights.init(dirichletWeightsTriplet);
+        }
+        {
+            PROFILING_SCOPED_TIMER_CUSTOM("Build pressure stiffness matrix preconditioner");
+            [[maybe_unused]]const int preconditionError = pressureStiffnessIC0.init();
+            assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
+        }
+    });
 
-    triplet.deinit();
-    dirichletWeightsTriplet.deinit();
-    allBoundaryNodes.clear();
 
     // ======================================================================
     // ==================== ASSEMBLE DIVERGENCE MATRICES ====================
     // ======================================================================
 
-    assembleDivergenceMatrix<PressureShape, VelocityShape, true>(velocityDivergenceMatrix);
-    assembleDivergenceMatrix<VelocityShape, PressureShape, false>(pressureDivergenceMatrix);
+    const real dtInv = real(1) / dt;
+    g.run([&](){
+        {
+            PROFILING_SCOPED_TIMER_CUSTOM("Build velocity divergence matrix");
+            assembleDivergenceMatrix<PressureShape, VelocityShape, true>(velocityDivergenceMatrix);
+            // TODO: Make the multiplication with scalar multithreaded. Question: should this line stay
+            // here then?
+            velocityDivergenceMatrix *= -dtInv;
+        }
+    });
+
+    g.run_and_wait([&](){
+        {
+            PROFILING_SCOPED_TIMER_CUSTOM("Build pressure divergence matrix");
+            assembleDivergenceMatrix<VelocityShape, PressureShape, false>(pressureDivergenceMatrix);
+            // TODO: Make the multiplication with scalar multithreaded. Question: should this line stay
+            // here then?
+            pressureDivergenceMatrix *= -dt;
+        }
+    });
 
     // ====================================================================
-
-    const real dtInv = real(1) / dt;
-    velocityDivergenceMatrix *= -dtInv;
-    pressureDivergenceMatrix *= -dt;
 
     const int nodesCount = grid.getNodesCount();
     currentVelocitySolution.init(nodesCount * 2, 0.0f);
@@ -1133,32 +1175,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     std::unordered_map<char, float> pressureVars;
 
     exportSolution(0);
-
-    tbb::task_group g;
-    SMM::CSRMatrix<real>::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
-    g.run([&](){
-        printf("Start building velocity mass matrix preconditioner\n");
-        [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
-        assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
-        printf("Velocity mass matrix preconditioner is built\n");
-    });
-    
-    SMM::CSRMatrix<real>::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
-    g.run([&]() {
-        printf("Start building pressure stiffnes matrix preconditioner\n");
-        [[maybe_unused]]const int preconditionError = pressureStiffnessIC0.init();
-        assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
-        printf("Pressure stiffness matrix preconditioner is built\n");
-    });
-
-    SMM::CSRMatrix<real>::IC0Preconditioner diffusionIC0(diffusionMatrix);
-    g.run_and_wait([&]() {
-        printf("Start building diffusion matrix preconditioner\n");
-        [[maybe_unused]]const int preconditionError = diffusionIC0.init();
-        assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
-        printf("Diffusion matrix preconditioner is built\n");
-    });
-    printf("All preconditioners are built\n");
     const real eps = 1e-8;
 
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
