@@ -27,9 +27,6 @@ extern "C" __global__ void advect(
   const NSFem::Point2D velocity(uVelocity[i], vVelocity[i]);
   const NSFem::Point2D start = position - velocity * dt;
 
-  NSFem::Point2D elementNodes[elementSize];
-  int elementIndexes[elementSize];
-
   // If start is inside some element xi and eta will be the barrycentric coordinates
   // of start inside that element.
   float xi, eta;
@@ -41,12 +38,13 @@ extern "C" __global__ void advect(
       // This is possible because xi and eta do not change when the element is transformed
       // to the unit element where the shape functions are defined. 
       float uResult = 0, vResult = 0;
-      grid.getElement(element, elementIndexes, reinterpret_cast<float*>(elementNodes));
+      const int* elementIndexes = grid.getElement(element);
       float interpolationCoefficients[elementSize];
       P2ShapeEval(xi, eta, interpolationCoefficients);
       for(int k = 0; k < elementSize; ++k) {
-          uResult += interpolationCoefficients[k] * uVelocity[elementIndexes[k]];
-          vResult += interpolationCoefficients[k] * vVelocity[elementIndexes[k]];
+          const int nodeIndex = elementIndexes[k];
+          uResult += interpolationCoefficients[k] * uVelocity[nodeIndex];
+          vResult += interpolationCoefficients[k] * vVelocity[nodeIndex];
       }
       uVelocityOut[i] = uResult;
       vVelocityOut[i] = vResult;
