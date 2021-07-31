@@ -37,6 +37,7 @@ def processTimings(allFunctionTimes, totalRuns, showIndividualTimes):
         if(len(timings) != totalRuns):
             print("[WARNING] This function was run {} times. The requested amout was {}".format(
                 len(timings), totalRuns))
+        print("****************************************************")
         print("Function: {}".format(fn))
         print("Mean: {}".format(statistics.fmean(timings)))
         print("Median: {}".format(statistics.median_high(timings)))
@@ -47,6 +48,7 @@ def processTimings(allFunctionTimes, totalRuns, showIndividualTimes):
             print("Individual runs")
             for timing in timings:
                 print(timing)
+        print("****************************************************")
 
 
 def main():
