@@ -183,7 +183,7 @@ target_include_directories(gpu_sim
 set_target_properties(gpu_sim
     PROPERTIES
 		CUDA_PTX_COMPILATION ON
-		CUDA_ARCHITECTURES 20)
+		CUDA_ARCHITECTURES 21)
 
 target_compile_options(gpu_sim
 	PRIVATE

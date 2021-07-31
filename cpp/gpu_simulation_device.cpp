@@ -43,7 +43,7 @@ EC::ErrorCode GPUSimulationDevice::advect(
     GPUFemGrid2D grid = kdTree.getGrid();
     NSFem::KDTree<GPUFemGrid2D> tree = kdTree.getTree();
     
-    const GPU::Dim3 blockSize(256);
+    const GPU::Dim3 blockSize(512);
     const GPU::Dim3 gridSize((grid.getNodesCount() + blockSize.x) / blockSize.x);
     void* kernelParams[] = {
         (void*)&tree,
