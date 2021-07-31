@@ -14,9 +14,14 @@
 #include "tbb/task_group.h"
 #include "kd_tree_builder.h"
 
-#define GPU_SIMULATION
+// If this is defined GPU devices will be initialized and load all available kernels
+// #define SETUP_GPU
 
-#ifdef GPU_SIMULATION
+// If this is defined the KD tree will be uploaded to the GPU and the advection phase will be performed on the GPU.
+// This requires SETUP_GPU to be defined
+// #define GPU_ADVECTION
+
+#ifdef SETUP_GPU
 #include "gpu_simulation_device.h"
 #endif
 
@@ -290,7 +295,7 @@ private:
         V
     };
 
-#ifdef GPU_SIMULATION
+#ifdef SETUP_GPU
     /// A Device manager which owns all GPU devices which will be used for simulation purposes.
     /// It loads the simulation kernels for each device and is used to call each kernel.
     /// @note Multi device simulation is not supported at this moment.
@@ -636,7 +641,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
     }
     KDTreeBuilder builder;
     kdTreeCPUOwner = builder.buildCPUOwner(&grid);
-#ifdef GPU_SIMULATION
+#ifdef GPU_ADVECTION
     RETURN_ON_ERROR_CODE(gpuDevman.init(kdTreeCPUOwner));
 #endif
     return EC::ErrorCode();
@@ -1413,7 +1418,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     real* const vVelocityOut
 ) {
     const int velocityNodesCount = grid.getNodesCount();
-#ifdef GPU_SIMULATION
+#ifdef GPU_ADVECTION
     const EC::ErrorCode status = gpuDevman.getDevice(0).advect(
         velocityNodesCount,
         uVelocity,
