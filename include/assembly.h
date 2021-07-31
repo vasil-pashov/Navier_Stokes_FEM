@@ -4,7 +4,7 @@
 #include <grid.h>
 #include "error_code.h"
 #include "static_matrix.h"
-#include "kd_tree.h"
+#include "kd_tree.cuh"
 #include <string>
 #include <nlohmann/json.hpp>
 #include <opencv2/imgproc.hpp>
@@ -12,6 +12,18 @@
 #include "tbb/blocked_range.h"
 #include "tbb/parallel_for.h"
 #include "tbb/task_group.h"
+#include "kd_tree_builder.h"
+
+// If this is defined GPU devices will be initialized and load all available kernels
+// #define SETUP_GPU
+
+// If this is defined the KD tree will be uploaded to the GPU and the advection phase will be performed on the GPU.
+// This requires SETUP_GPU to be defined
+// #define GPU_ADVECTION
+
+#ifdef SETUP_GPU
+#include "gpu_simulation_device.h"
+#endif
 
 namespace NSFem {
 
@@ -282,11 +294,19 @@ private:
         U,
         V
     };
+
+#ifdef SETUP_GPU
+    /// A Device manager which owns all GPU devices which will be used for simulation purposes.
+    /// It loads the simulation kernels for each device and is used to call each kernel.
+    /// @note Multi device simulation is not supported at this moment.
+    GPUSimulation::GPUSimulationDeviceManager gpuDevman;
+#endif
+
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
 
     /// KDTree which is used semi-Lagrangian solver is used.
-    TriangleKDTree kdTree;
+    KDTreeCPUOwner kdTreeCPUOwner;
 
     /// Mass matrix for the velocity formed by (fi_i, fi_j) : forall i, j in 0...numVelocityNodes - 1
     /// Where fi_i is the i-th velocity basis function. This matrix is the same for the u and v components of the velocity,
@@ -619,8 +639,11 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
     if(outPath != nullptr) {
         outFolder = outPath;
     }
-
-    kdTree.init(&grid);
+    KDTreeBuilder builder;
+    kdTreeCPUOwner = builder.buildCPUOwner(&grid);
+#ifdef GPU_ADVECTION
+    RETURN_ON_ERROR_CODE(gpuDevman.init(kdTreeCPUOwner));
+#endif
     return EC::ErrorCode();
 
 }
@@ -1395,12 +1418,28 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     real* const vVelocityOut
 ) {
     const int velocityNodesCount = grid.getNodesCount();
+#ifdef GPU_ADVECTION
+    const EC::ErrorCode status = gpuDevman.getDevice(0).advect(
+        velocityNodesCount,
+        uVelocity,
+        vVelocity,
+        dt,
+        uVelocityOut,
+        vVelocityOut
+    );
+    if(status.hasError()) {
+        fprintf(stderr, "%s\n", status.getMessage());
+        assert(false);
+        exit(1);
+    }
+#else
+    
     const real* velocityNodes = grid.getNodesBuffer();
     
     static_assert(VelocityShape::size == 6, "Only P2-P1 elements are supported");
     assert(grid.getElementSize() == VelocityShape::size && "Only P2-P1 elements are supported");
-    tbb::parallel_for(tbb::blocked_range<size_t>(0,velocityNodesCount),
-        [&](const tbb::blocked_range<size_t>& r) {
+    tbb::parallel_for(tbb::blocked_range<int>(0,velocityNodesCount),
+        [&](const tbb::blocked_range<int>& r) {
         Point2D elementNodes[VelocityShape::size];
         int elementIndexes[VelocityShape::size];
         for(int i = r.begin(); i < r.end(); ++i) {
@@ -1413,7 +1452,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
             real xi, eta;
             // If start does not lie in any triangle this will be the index of the nearest node to start
             int nearestNeighbour;
-            const int element = kdTree.findElement(start, xi, eta, nearestNeighbour);
+            const int element = kdTreeCPUOwner.getTree().findElement(start, xi, eta, nearestNeighbour);
             if(element > -1) {
                 // Start point lies in an element, interpolate it by using the shape functions.
                 // This is possible because xi and eta do not change when the element is transformed
@@ -1436,6 +1475,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
             }
         }
     });
+#endif
 }
 
 }

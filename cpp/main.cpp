@@ -12,6 +12,8 @@
 #include "tbb/task_scheduler_init.h"
 #include "tbb/global_control.h"
 
+#include "gpu_simulation_device.h"
+
 enum SolverMethod {
     FEM,
     SemiLagrangianFEM

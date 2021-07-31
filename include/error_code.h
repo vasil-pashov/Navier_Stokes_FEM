@@ -6,12 +6,9 @@
 // If status is NOT zero assume that there is error
 
 #define RETURN_ON_ERROR_CODE(Err) \
-	do { \
-		EC::ErrorCode _Error = Err; \
-		if(_Error.hasError()) { \
-			return _Error; \
-		} \
-	} while(false);
+	if(Err.hasError()) { \
+		return Err; \
+	}
 
 namespace EC {
 	class ErrorCode {
