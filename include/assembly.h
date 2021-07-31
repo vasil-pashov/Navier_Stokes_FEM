@@ -1086,12 +1086,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     dirichletWeightsTriplet.deinit();
     allBoundaryNodes.clear();
 
-    SMM::CSRMatrix<real>::IC0Preconditioner diffusionIC0(diffusionMatrix);
-    {
-        [[maybe_unused]]const int preconditionError = diffusionIC0.init();
-        assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
-    }
-
     // ======================================================================
     // ==================== ASSEMBLE PRESSURE STIFFNESS =====================
     // ======================================================================
@@ -1140,22 +1134,32 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
     exportSolution(0);
 
+    tbb::task_group g;
     SMM::CSRMatrix<real>::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
-    {
+    g.run([&](){
+        printf("Start building velocity mass matrix preconditioner\n");
         [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
-    }
-
+        printf("Velocity mass matrix preconditioner is built\n");
+    });
+    
     SMM::CSRMatrix<real>::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
-    {
+    g.run([&]() {
+        printf("Start building pressure stiffnes matrix preconditioner\n");
         [[maybe_unused]]const int preconditionError = pressureStiffnessIC0.init();
         assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
-    }
+        printf("Pressure stiffness matrix preconditioner is built\n");
+    });
 
+    SMM::CSRMatrix<real>::IC0Preconditioner diffusionIC0(diffusionMatrix);
+    g.run_and_wait([&]() {
+        printf("Start building diffusion matrix preconditioner\n");
+        [[maybe_unused]]const int preconditionError = diffusionIC0.init();
+        assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
+        printf("Diffusion matrix preconditioner is built\n");
+    });
+    printf("All preconditioners are built\n");
     const real eps = 1e-8;
-
-
-    tbb::task_group g;
 
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
