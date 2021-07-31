@@ -55,7 +55,7 @@ public:
     /// Free the last element of the vector. The element is not destryed when this is called.
     DEVICE void popBack() {
         assert(firstFreePosition > 0);
-        firstFreePosition = std::max(firstFreePosition - 1, 0);
+        firstFreePosition = NSFemGPU::max(firstFreePosition - 1, 0);
     }
 
     /// Check of the vector is empty

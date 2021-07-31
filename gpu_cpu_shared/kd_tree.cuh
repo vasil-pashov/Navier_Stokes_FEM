@@ -1,7 +1,4 @@
 #pragma once
-#include <limits>
-#include <cmath>
-#include <numeric>
 #include "kd_tree_common.cuh"
 #include "small_vector.cuh"
 #include "defines_common.cuh"
@@ -76,7 +73,7 @@ public:
         // a point which is in another node and is closer to the one in this leaf.
         // 2) Go upwards the recursion stack. For each node check if the distance between the point and the
         // splitting plane is less than the minimal distance found. If so the other node must traversed too.
-        float minDistSq = std::numeric_limits<float>::max();
+        float minDistSq = FLT_MAX;
         assert(grid->getElementSize() == 6);
         while(!traversalStack.empty()) {
             const TraversalStackEntry& stackEntry = traversalStack.back();

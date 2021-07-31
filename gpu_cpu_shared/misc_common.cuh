@@ -2,6 +2,7 @@
 #define MISC_COMMON_H
 
 #include "defines_common.cuh"
+#include <float.h>
 
 namespace NSFem {
 using real = float;
@@ -36,29 +37,31 @@ struct Point2D {
 class BBox2D {
 public:
     DEVICE BBox2D() :
-        min(std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()),
-        max(-std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity())
+        min(FLT_MAX, FLT_MAX),
+        max(-FLT_MAX, -FLT_MAX)
     {
-        static_assert(std::numeric_limits<float>::is_iec559, "IEEE 754 required");
+
     }
 
     DEVICE BBox2D(const Point2D& min, const Point2D& max) : 
         min(min), max(max)
-    {}
+    {
+        
+    }
 
     DEVICE void reset() {
-        min.x = std::numeric_limits<float>::infinity();
-        min.y = std::numeric_limits<float>::infinity();
-        max.x = -std::numeric_limits<float>::infinity();
-        max.y = -std::numeric_limits<float>::infinity();
+        min.x = FLT_MAX;
+        min.y = FLT_MAX;
+        max.x = -FLT_MAX;
+        max.y = -FLT_MAX;
     }
 
     DEVICE void expand(const Point2D& point) {
-        min.x = std::min(point.x, min.x);
-        min.y = std::min(point.y, min.y);
+        min.x = NSFemGPU::min(point.x, min.x);
+        min.y = NSFemGPU::min(point.y, min.y);
 
-        max.x = std::max(point.x, point.x);
-        max.y = std::max(point.y, point.y);
+        max.x = NSFemGPU::max(point.x, point.x);
+        max.y = NSFemGPU::max(point.y, point.y);
     }
 
     DEVICE bool isInside(const Point2D& point) {
