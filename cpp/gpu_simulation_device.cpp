@@ -5,6 +5,8 @@
 #include <fstream>
 namespace GPUSimulation {
 
+#define GET_PTX_FILE_PATH(ptxFileName) PTX_SOURCE_FOLDER ptxFileName
+
 EC::ErrorCode GPUSimulationDevice::uploadKDTree(const NSFem::KDTreeCPUOwner& cpuOwner) {
     GPU::ScopedGPUContext contextGuard(context);
     RETURN_ON_ERROR_CODE(cpuOwner.upload(kdTree));
@@ -75,7 +77,7 @@ GPUSimulationDeviceManager::GPUSimulationDeviceManager() :
 EC::ErrorCode GPUSimulationDeviceManager::init(const NSFem::KDTreeCPUOwner& cpuOwner) {
     RETURN_ON_ERROR_CODE(GPUDeviceManagerBase<GPUSimulationDevice>::initDevices());
     // TODO: Fix the hardcoded path
-    const char* filePath = "/home/vasil/Documents/FMI/Магистратура/Дипломна/CPP/fem_solver/build/ptx/advection.ptx";
+    const char* filePath = GET_PTX_FILE_PATH("advection.ptx");
     std::ifstream file(filePath, std::ifstream::ate | std::ifstream::binary);
     if(file.fail()) {
         return EC::ErrorCode(errno, "%d: %s. Cannot open file: %s.", errno, strerror(errno), filePath);

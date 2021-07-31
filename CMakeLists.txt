@@ -37,6 +37,8 @@ set(
 	"If ON all scoped timers will be enabled and will print their result on the console"
 )
 
+set(PTX_SOURCE_FOLDER "${PROJECT_BINARY_DIR}/ptx")
+
 if(${WITH_ADDRESS_SANITIZER})
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		set(_sanitizer_flags "-g -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -O0")
@@ -88,15 +90,18 @@ target_include_directories(${PROJECT_NAME}
 		include
 		gpu_cpu_shared
 		sparse_matrix_math/include)
+
 target_link_libraries(${PROJECT_NAME}
 	PRIVATE
 		TBB::tbb
 		nlohmann_json::nlohmann_json
 		opencv::opencv
 		CUDA::cuda_driver)
+
 target_compile_definitions(${PROJECT_NAME}
 	PRIVATE
-		-D_USE_MATH_DEFINES)
+		-D_USE_MATH_DEFINES
+		-DPTX_SOURCE_FOLDER="${PTX_SOURCE_FOLDER}/")
 
 if(NOT MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE 
@@ -196,6 +201,6 @@ add_dependencies(${PROJECT_NAME} gpu_sim)
 
 add_custom_command(
 	TARGET ${PROJECT_NAME} POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/ptx
-	COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_OBJECTS:gpu_sim>" ${PROJECT_BINARY_DIR}/ptx
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${PTX_SOURCE_FOLDER}
+	COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_OBJECTS:gpu_sim>" ${PTX_SOURCE_FOLDER}
 	COMMAND_EXPAND_LISTS)
