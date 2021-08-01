@@ -101,7 +101,8 @@ target_link_libraries(${PROJECT_NAME}
 target_compile_definitions(${PROJECT_NAME}
 	PRIVATE
 		-D_USE_MATH_DEFINES
-		-DPTX_SOURCE_FOLDER="${PTX_SOURCE_FOLDER}/")
+		-DPTX_SOURCE_FOLDER="${PTX_SOURCE_FOLDER}/"
+		-DSMM_MULTITHREADING_TBB)
 
 if(NOT MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE 

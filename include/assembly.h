@@ -21,6 +21,9 @@
 // This requires SETUP_GPU to be defined
 // #define GPU_ADVECTION
 
+// If this is defined Preconditioned Conjugate Gradient will be used and IC0 preconditioning matrices
+// for diffusion, pressure and velocity will be computed
+// #define USE_PRECONDITIONING
 #ifdef SETUP_GPU
 #include "gpu_simulation_device.h"
 #endif
@@ -1050,11 +1053,13 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
             velocityMassMatrix.init(triplet);
         }
+        #ifdef USE_PRECONDITIONING
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build velocity mass matrix preconditioner");
             [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
             assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
         }
+        #endif
     });
 
     // =====================================================================
@@ -1096,11 +1101,13 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
             velocityDirichletWeights.init(dirichletWeightsTriplet);    
         }
+        #ifdef USE_PRECONDITIONING
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build diffusion matrix preconditioner");
             [[maybe_unused]]const int preconditionError = diffusionIC0.init();
             assert(preconditionError == 0 && "Failed to precondition the diffusion matrix. It should be SPD");
         }
+        #endif
         
     });
 
@@ -1129,11 +1136,13 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             pressureStiffnessMatrix.init(triplet);
             pressureDirichletWeights.init(dirichletWeightsTriplet);
         }
+        #ifdef USE_PRECONDITIONING
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build pressure stiffness matrix preconditioner");
             [[maybe_unused]]const int preconditionError = pressureStiffnessIC0.init();
             assert(preconditionError == 0 && "Failed to precondition the pressure stiffness matrix. It should be SPD");
         }
+        #endif
     });
 
 
@@ -1177,6 +1186,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     exportSolution(0);
     const real eps = 1e-8;
 
+{
+    PROFILING_SCOPED_TIMER_CUSTOM("Time iteration");
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
 // ==================================================================================
@@ -1230,8 +1241,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             static_cast<real*>(currentPressureSolution),
             static_cast<real*>(currentPressureSolution),
             -1,
-            eps,
-            pressureStiffnessIC0
+            eps
+            #ifdef USE_PRECONDITIONING
+            ,pressureStiffnessIC0
+            #endif
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
 
@@ -1253,8 +1266,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 static_cast<real*>(advectedVelocity),
                 static_cast<real*>(currentVelocitySolution),
                 -1,
-                eps,
-                velocityMassIC0
+                eps
+                #ifdef USE_PRECONDITIONING
+                ,velocityMassIC0
+                #endif
             );
             assert(status == SMM::SolverStatus::SUCCESS);
 
@@ -1296,32 +1311,39 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 static_cast<real*>(currentVelocitySolution),
                 static_cast<real*>(currentVelocitySolution),
                 -1,
-                eps,
-                diffusionIC0
+                eps
+                #ifdef USE_PRECONDITIONING
+                ,diffusionIC0
+                #endif
             );
             assert(status == SMM::SolverStatus::SUCCESS);
         };
 
-        g.run([&](){
+        // Multithreaded per channel computation is commented until tests are made to clear out
+        // it it makes the program run faster when the sparse matrix vector product is multthreaded
+        //g.run([&](){
             diffusionSolve(
                 currentVelocitySolution,
                 velocityRhs,
                 tmp,
                 VelocityChannel::U
             );
-        });
-        g.run_and_wait([&](){
+        //});
+        // Multithreaded per channel computation is commented until tests are made to clear out
+        // it it makes the program run faster when the sparse matrix vector product is multthreaded
+        //g.run_and_wait([&](){
             diffusionSolve(
                 currentVelocitySolution + nodesCount,
                 velocityRhs + nodesCount,
                 tmp + nodesCount,
                 VelocityChannel::V
             );
-        });
+        //});
 
         exportSolution(timeStep);
 
     }
+}
 }
 
 template<typename VelocityShape, typename PressureShape>
