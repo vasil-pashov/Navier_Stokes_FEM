@@ -180,7 +180,8 @@ target_precompile_headers(${PROJECT_NAME}
 
 add_library(gpu_sim
 	OBJECT
-		gpu/advection.cu)
+		gpu/advection.cu
+		gpu/matrix_math.cu)
 
 target_include_directories(gpu_sim
 	PRIVATE
