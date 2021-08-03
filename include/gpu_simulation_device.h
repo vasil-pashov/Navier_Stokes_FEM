@@ -1,6 +1,8 @@
 #pragma once
 #include "gpu_host_common.h"
 #include "kd_tree_builder.h"
+#include "gpu_sparse_matrix.h"
+#include "sparse_matrix_math.h"
 #include <cuda.h>
 
 namespace EC {
@@ -11,8 +13,18 @@ namespace GPUSimulation {
     class GPUSimulationDevice : public GPU::GPUDeviceBase {
     friend class GPUSimulationDeviceManager;
     public:
+        enum SimMatrix {
+            pressureSitffnes,
+            velocityMass,
+            diffusion,
+            velocityDivergence,
+            pressureDivergence,
+            count
+        };
+        EC::ErrorCode loadModules(const char* advectionData, const char* sparseMatrixData);
         EC::ErrorCode uploadKDTree(const NSFem::KDTreeCPUOwner& cpuOwner);
         EC::ErrorCode initVelocityBuffers(const int numElements);
+        EC::ErrorCode uploadMatrix(SimMatrix matrix, const SMM::TripletMatrix<float>& triplet);
         EC::ErrorCode advect(
             const int numElements,
             const float* uVelocity,
@@ -21,9 +33,23 @@ namespace GPUSimulation {
             float* uVelocityOut,
             float* vVelocityOut
         );
+        EC::ErrorCode sparseMatrixVectorProduct(
+            SimMatrix matrix,
+            const GPU::GPUBuffer& x,
+            GPU::GPUBuffer& res
+        );
     private:
+        EC::ErrorCode loadAdvectionModule(const char* data);
+        EC::ErrorCode loadSparseMatrixModule(const char* data);
+
+        GPUSimulation::GPUSparseMatrix matrices[SimMatrix::count];
+
         CUmodule advectionModule;
+        CUmodule sparseMatrixModule;
+
         CUfunction advectionKernel;
+        CUfunction sparseMatrixVectorProductKernel;
+
         NSFem::KDTreeGPUOwner kdTree;
 
         GPU::GPUBuffer uVelocityInBuffer;
@@ -34,8 +60,16 @@ namespace GPUSimulation {
     };
 
     class GPUSimulationDeviceManager : public GPU::GPUDeviceManagerBase<GPUSimulationDevice> {
+    private:
+        EC::ErrorCode loadModule(
+            const char* filePath,
+            const int numKernels,
+            const char* kernelsToExtract[],
+            CUmodule& moduleOut,
+            CUfunction** kernelsOut
+        );
     public:
         GPUSimulationDeviceManager();
-        EC::ErrorCode init(const NSFem::KDTreeCPUOwner& cpuOwner);
+        EC::ErrorCode init();
     };
 };

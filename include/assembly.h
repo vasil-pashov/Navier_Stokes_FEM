@@ -23,7 +23,8 @@
 
 // If this is defined Preconditioned Conjugate Gradient will be used and IC0 preconditioning matrices
 // for diffusion, pressure and velocity will be computed
-// #define USE_PRECONDITIONING
+#define USE_PRECONDITIONING
+
 #ifdef SETUP_GPU
 #include "gpu_simulation_device.h"
 #endif
@@ -423,7 +424,7 @@ private:
     /// to iterate over all elements twice and also offset all indexes by the number of nodes for the second (y drection)
     /// matrix.
     template<typename RegularShape, typename DelShape, bool sideBySide>
-    void assembleDivergenceMatrix(SMM::CSRMatrix<real>& out);
+    void assembleDivergenceMatrix(SMM::TripletMatrix<real>& out);
 
     /// Impose Dirichlet Boundary conditions on the velocity vector passed as an input
     /// @param[in, out] velocityVector Velocity vector where the Dirichlet BC will be imposed
@@ -645,7 +646,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
     KDTreeBuilder builder;
     kdTreeCPUOwner = builder.buildCPUOwner(&grid);
 #ifdef GPU_ADVECTION
-    RETURN_ON_ERROR_CODE(gpuDevman.init(kdTreeCPUOwner));
+    RETURN_ON_ERROR_CODE(gpuDevman.init());
 #endif
     return EC::ErrorCode();
 
@@ -1035,6 +1036,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         printf("Output folder: %s\n", outFolder.c_str());
     }
 
+#ifdef GPU_ADVECTION
+    RETURN_ON_ERROR_CODE(gpuDevman.getDevice(0).uploadKDTree(kdTreeCPUOwner));
+#endif
+
     PROFILING_SCOPED_TIMER_FUN()
 
     tbb::task_group g;
@@ -1051,15 +1056,23 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             PROFILING_SCOPED_TIMER_CUSTOM("Build velocity mass matrix");
             triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
             assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
+
+#ifdef GPU_PRESSURE_PROJECTION
+            gpuDevman.getDevice(0).uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::SimMatix::velocityMass,
+                triplet
+            );
+#else
             velocityMassMatrix.init(triplet);
+#endif
         }
-        #ifdef USE_PRECONDITIONING
+#ifdef USE_PRECONDITIONING
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build velocity mass matrix preconditioner");
             [[maybe_unused]]const int preconditionError = velocityMassIC0.init();
             assert(preconditionError == 0 && "Failed to precondition the velocity mass matrix. It should be SPD");
         }
-        #endif
+#endif
     });
 
     // =====================================================================
@@ -1097,8 +1110,14 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 triplet,
                 dirichletWeightsTriplet
             );
+#ifdef GPU_PRESSURE_PROJECTION
+            gpuDevman.getDevice(0).uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::SimMatix::diffusion,
+                triplet
+            );
+#else
             diffusionMatrix.init(triplet);
-
+#endif
             velocityDirichletWeights.init(dirichletWeightsTriplet);    
         }
         #ifdef USE_PRECONDITIONING
@@ -1133,7 +1152,14 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 triplet,
                 dirichletWeightsTriplet
             );
+#ifdef GPU_PRESSURE_PROJECTION
+            gpuDevman.getDevice(0).uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::SimMatix::pressureStiffness,
+                triplet
+            );
+#else
             pressureStiffnessMatrix.init(triplet);
+#endif
             pressureDirichletWeights.init(dirichletWeightsTriplet);
         }
         #ifdef USE_PRECONDITIONING
@@ -1152,22 +1178,42 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
     const real dtInv = real(1) / dt;
     g.run([&](){
+        SMM::TripletMatrix<real> triplet;
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build velocity divergence matrix");
-            assembleDivergenceMatrix<PressureShape, VelocityShape, true>(velocityDivergenceMatrix);
+            assembleDivergenceMatrix<PressureShape, VelocityShape, true>(triplet);
             // TODO: Make the multiplication with scalar multithreaded. Question: should this line stay
             // here then?
+#ifdef GPU_PRESSURE_PROJECTION
+            triplet *= -dtInv;
+            gpuDevman.getDevice(0).uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::SimMatix::velocityDivergence,
+                triplet
+            );
+#else
+            velocityDivergenceMatrix.init(triplet);
             velocityDivergenceMatrix *= -dtInv;
+#endif
         }
     });
 
     g.run_and_wait([&](){
+        SMM::TripletMatrix<real> triplet;
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build pressure divergence matrix");
-            assembleDivergenceMatrix<VelocityShape, PressureShape, false>(pressureDivergenceMatrix);
+            assembleDivergenceMatrix<VelocityShape, PressureShape, false>(triplet);
             // TODO: Make the multiplication with scalar multithreaded. Question: should this line stay
             // here then?
+#ifdef GPU_PRESSURE_PROJECTION
+            triplet *= -dt;
+            gpuDevman.getDevice(0).uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::SimMatix::pressureDivergence,
+                triplet
+            );
+#else
+            pressureDivergenceMatrix.init(triplet);
             pressureDivergenceMatrix *= -dt;
+#endif
         }
     });
 
@@ -1416,7 +1462,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleConvectionMatri
 
 template<typename VelocityShape, typename PressureShape>
 template<typename RegularShape, typename DelShape, bool sideBySide>
-void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatrix(SMM::CSRMatrix<real>& out) {
+void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatrix(SMM::TripletMatrix<real>& out) {
     const int numNodes = grid.getNodesCount();
     const int numElements = grid.getElementsCount();
     const int elementSize = std::max(RegularShape::size, DelShape::size);
@@ -1426,7 +1472,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatri
     // IMPORTANT: The current implementation works only for P2-P1 shape function combination
     const int rows = sideBySide ? grid.getPressureNodesCount() : numNodes * 2;
     const int cols = sideBySide ? numNodes * 2 : grid.getPressureNodesCount();
-    SMM::TripletMatrix<real> triplet(rows, cols);
+    out.init(rows, cols, 0);
     StaticMatrix<real, RegularShape::size, DelShape::size> divLocalX;
     StaticMatrix<real, RegularShape::size, DelShape::size> divLocalY;
     LocalDivergenceFunctor<RegularShape, DelShape> localFunctor;
@@ -1440,16 +1486,15 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatri
             for(int localCol = 0; localCol < DelShape::size; ++localCol) {
                 const int globalCol = elementIndexes[localCol];
                 if constexpr (sideBySide) {
-                    triplet.addEntry(globalRow, globalCol, divLocalX.element(localRow, localCol));
-                    triplet.addEntry(globalRow, globalCol + numNodes, divLocalY.element(localRow, localCol));
+                    out.addEntry(globalRow, globalCol, divLocalX.element(localRow, localCol));
+                    out.addEntry(globalRow, globalCol + numNodes, divLocalY.element(localRow, localCol));
                 } else {
-                    triplet.addEntry(globalRow, globalCol, divLocalX.element(localRow, localCol));
-                    triplet.addEntry(globalRow + numNodes, globalCol, divLocalY.element(localRow, localCol));
+                    out.addEntry(globalRow, globalCol, divLocalX.element(localRow, localCol));
+                    out.addEntry(globalRow + numNodes, globalCol, divLocalY.element(localRow, localCol));
                 }
             }
         }
     }
-    out.init(triplet);
 }
 
 template<typename VelocityShape, typename PressureShape>

@@ -60,6 +60,7 @@ set(CPP
 	cpp/gpu_host_common.cpp
 	cpp/gpu_simulation_device.cpp
 	cpp/kd_tree_builder.cpp
+	cpp/gpu_sparse_matrix.cpp
 )
 
 set(HEADERS
@@ -73,6 +74,7 @@ set(HEADERS
 	include/gpu_host_common.h
 	include/gpu_simulation_device.h
 	include/kd_tree_builder.h
+	include/gpu_sparse_matrix.h
 	sparse_matrix_math/include/sparse_matrix_math.h
 	# shared between gpu and cpu
 	gpu_cpu_shared/kd_tree_common.cuh
@@ -102,7 +104,8 @@ target_compile_definitions(${PROJECT_NAME}
 	PRIVATE
 		-D_USE_MATH_DEFINES
 		-DPTX_SOURCE_FOLDER="${PTX_SOURCE_FOLDER}/"
-		-DSMM_MULTITHREADING_TBB)
+		-DSMM_MULTITHREADING_TBB
+		-DCUDA_API_PER_THREAD_DEFAULT_STREAM)
 
 if(NOT MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE 

@@ -7,6 +7,49 @@ namespace GPUSimulation {
 
 #define GET_PTX_FILE_PATH(ptxFileName) PTX_SOURCE_FOLDER ptxFileName
 
+EC::ErrorCode GPUSimulationDevice::loadModules(const char* advectionData, const char* sparseMatrixData) {
+    RETURN_ON_ERROR_CODE(loadAdvectionModule(advectionData));
+    return loadSparseMatrixModule(sparseMatrixData);
+}
+
+EC::ErrorCode GPUSimulationDevice::loadAdvectionModule(const char* data) {
+    const int kernelCount = 1;
+    std::array<const char*, kernelCount> kernelsToExtract = {
+        "advect"
+    };
+
+    std::array<CUfunction*, kernelCount> kernelPointers = {
+        &advectionKernel
+    };
+
+    return loadModule(
+        data,
+        kernelsToExtract.data(),
+        kernelCount,
+        advectionModule,
+        kernelPointers.data()
+    );
+}
+
+EC::ErrorCode GPUSimulationDevice::loadSparseMatrixModule(const char* data) {
+    const int kernelCount = 1;
+    std::array<const char*, kernelCount> kernelsToExtract = {
+        "sparseMatrixVectorProduct"
+    };
+
+    std::array<CUfunction*, kernelCount> kernelPointers = {
+        &sparseMatrixVectorProductKernel
+    };
+
+    return loadModule(
+        data,
+        kernelsToExtract.data(),
+        kernelCount,
+        sparseMatrixModule,
+        kernelPointers.data()
+    );
+}
+
 EC::ErrorCode GPUSimulationDevice::uploadKDTree(const NSFem::KDTreeCPUOwner& cpuOwner) {
     GPU::ScopedGPUContext contextGuard(context);
     RETURN_ON_ERROR_CODE(cpuOwner.upload(kdTree));
@@ -68,45 +111,72 @@ EC::ErrorCode GPUSimulationDevice::advect(
     return EC::ErrorCode();
 }
 
+EC::ErrorCode GPUSimulationDevice::uploadMatrix(
+    SimMatrix matrix,
+    const SMM::TripletMatrix<float>& triplet
+) {
+    GPU::ScopedGPUContext ctxGuard(context);
+    assert(matrix < SimMatrix::count);
+    return matrices[matrix].upload(triplet);
+}
+
+EC::ErrorCode GPUSimulationDevice::sparseMatrixVectorProduct(
+    const SimMatrix matrix,
+    const GPU::GPUBuffer& x,
+    GPU::GPUBuffer& res
+) {
+    GPUSimulation::GPUSparseMatrix& m = matrices[matrix];
+    GPU::ScopedGPUContext ctxGuard(context);
+    const GPU::Dim3 blockSize(512);
+    const GPU::Dim3 gridSize((m.getDenseRowCount() + blockSize.x) / blockSize.x);
+    const int rowCount = m.getDenseRowCount();
+    void* kernelParams[] = {
+        (void*)&rowCount,
+        (void*)&m.getRowStartHandle(),
+        (void*)&m.getColumnIndexHandle(),
+        (void*)&m.getValuesHandle(),
+        (void*)&x.getHandle(),
+        (void*)&res.getHandle()
+    };
+    GPU::KernelLaunchParams params(
+        blockSize,
+        gridSize,
+        kernelParams
+    );
+    return callKernelSync(sparseMatrixVectorProductKernel, params);
+}
+
 GPUSimulationDeviceManager::GPUSimulationDeviceManager() : 
     GPUDeviceManagerBase<GPUSimulationDevice>()
 {
 
 }
 
-EC::ErrorCode GPUSimulationDeviceManager::init(const NSFem::KDTreeCPUOwner& cpuOwner) {
+EC::ErrorCode GPUSimulationDeviceManager::init() {
     RETURN_ON_ERROR_CODE(GPUDeviceManagerBase<GPUSimulationDevice>::initDevices());
-    // TODO: Fix the hardcoded path
-    const char* filePath = GET_PTX_FILE_PATH("advection.ptx");
-    std::ifstream file(filePath, std::ifstream::ate | std::ifstream::binary);
-    if(file.fail()) {
-        return EC::ErrorCode(errno, "%d: %s. Cannot open file: %s.", errno, strerror(errno), filePath);
-    }
-    const int64_t fileSize = file.tellg();
-    file.seekg(0, std::ios::beg);
-    std::unique_ptr<char[]> data(new char[fileSize + 1]);
-    data[fileSize] = '\0';
-    file.read(data.get(), fileSize);
-
-    std::array<const char*, 1> kernelsToExtract = {
-        "advect"
+    auto loadModuleData = [](const char* filePath, std::vector<char>& data) -> EC::ErrorCode {
+        std::ifstream file(filePath, std::ifstream::ate | std::ifstream::binary);
+        if(file.fail()) {
+            return EC::ErrorCode(errno, "%d: %s. Cannot open file: %s.", errno, strerror(errno), filePath);
+        }
+        const int64_t fileSize = file.tellg();
+        file.seekg(0, std::ios::beg);
+        data.resize(fileSize + 1);
+        data[fileSize] = '\0';
+        file.read(data.data(), fileSize);
+        return EC::ErrorCode();
     };
 
-    for(GPUSimulationDevice& device : devices) {
-        std::array<CUfunction*, 1> kernelPointers = {
-            &device.advectionKernel
-        };
-        static_assert(kernelsToExtract.size() == kernelPointers.size());
-        RETURN_ON_ERROR_CODE(device.loadModule(
-            data.get(),
-            kernelsToExtract.data(),
-            kernelsToExtract.size(),
-            device.advectionModule,
-            kernelPointers.data()
-        ));
-        RETURN_ON_ERROR_CODE(device.uploadKDTree(cpuOwner));
-    }
+    const char* advectionPtxPath = GET_PTX_FILE_PATH("advection.ptx");
+    const char* sparseMatrixPtxPath = GET_PTX_FILE_PATH("matrix_math.ptx");
 
+    std::vector<char> advectionPtxData;
+    std::vector<char> sparseMatrixPtxData;
+    RETURN_ON_ERROR_CODE(loadModuleData(advectionPtxPath, advectionPtxData));
+    RETURN_ON_ERROR_CODE(loadModuleData(sparseMatrixPtxPath, sparseMatrixPtxData));
+    for(GPUSimulationDevice& device : devices) {
+        RETURN_ON_ERROR_CODE(device.loadModules(advectionPtxData.data(), sparseMatrixPtxData.data()));
+    }
     return EC::ErrorCode();
 }
 
