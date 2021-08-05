@@ -445,6 +445,10 @@ private:
         real* const uVelocityOut,
         real* const vVelocityOut
     );
+
+    GPUSimulation::GPUSimulationDevice& getSelectedGPUDevice() {
+        return gpuDevman.getDevice(0);
+    }
     
     template<typename Shape>
     struct LocalStiffnessFunctor {

@@ -33,9 +33,15 @@ namespace GPUSimulation {
             float* uVelocityOut,
             float* vVelocityOut
         );
-        EC::ErrorCode sparseMatrixVectorProduct(
+        EC::ErrorCode spRMult(
             SimMatrix matrix,
             const GPU::GPUBuffer& x,
+            GPU::GPUBuffer& res
+        );
+        EC::ErrorCode spRMultSub(
+            const SimMatrix matrix,
+            const GPU::GPUBuffer& mult,
+            const GPU::GPUBuffer& lhs,
             GPU::GPUBuffer& res
         );
     private:
@@ -47,8 +53,9 @@ namespace GPUSimulation {
         CUmodule advectionModule;
         CUmodule sparseMatrixModule;
 
-        CUfunction advectionKernel;
-        CUfunction sparseMatrixVectorProductKernel;
+        CUfunction advection_kernel;
+        CUfunction spRMult_kernel;
+        CUfunction spRMultSub_kernel;
 
         NSFem::KDTreeGPUOwner kdTree;
 

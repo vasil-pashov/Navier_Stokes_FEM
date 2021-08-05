@@ -19,7 +19,7 @@ EC::ErrorCode GPUSimulationDevice::loadAdvectionModule(const char* data) {
     };
 
     std::array<CUfunction*, kernelCount> kernelPointers = {
-        &advectionKernel
+        &advection_kernel
     };
 
     return loadModule(
@@ -32,13 +32,15 @@ EC::ErrorCode GPUSimulationDevice::loadAdvectionModule(const char* data) {
 }
 
 EC::ErrorCode GPUSimulationDevice::loadSparseMatrixModule(const char* data) {
-    const int kernelCount = 1;
+    const int kernelCount = 2;
     std::array<const char*, kernelCount> kernelsToExtract = {
-        "sparseMatrixVectorProduct"
+        "spRMult",
+        "spRMultSub"
     };
 
     std::array<CUfunction*, kernelCount> kernelPointers = {
-        &sparseMatrixVectorProductKernel
+        &spRMult_kernel,
+        &spRMultSub_kernel
     };
 
     return loadModule(
@@ -105,7 +107,7 @@ EC::ErrorCode GPUSimulationDevice::advect(
         gridSize,
         kernelParams
     );
-    RETURN_ON_ERROR_CODE(callKernelSync(advectionKernel, params));
+    RETURN_ON_ERROR_CODE(callKernelSync(advection_kernel, params));
     RETURN_ON_ERROR_CODE(uVelocityOutBuffer.downloadBuffer(uVelocityOut));
     RETURN_ON_ERROR_CODE(vVelocityOutBuffer.downloadBuffer(vVelocityOut));
     return EC::ErrorCode();
@@ -120,7 +122,7 @@ EC::ErrorCode GPUSimulationDevice::uploadMatrix(
     return matrices[matrix].upload(triplet);
 }
 
-EC::ErrorCode GPUSimulationDevice::sparseMatrixVectorProduct(
+EC::ErrorCode GPUSimulationDevice::spRMult(
     const SimMatrix matrix,
     const GPU::GPUBuffer& x,
     GPU::GPUBuffer& res
@@ -143,7 +145,35 @@ EC::ErrorCode GPUSimulationDevice::sparseMatrixVectorProduct(
         gridSize,
         kernelParams
     );
-    return callKernelSync(sparseMatrixVectorProductKernel, params);
+    return callKernelSync(spRMult_kernel, params);
+}
+
+EC::ErrorCode GPUSimulationDevice::spRMultSub(
+    const SimMatrix matrix,
+    const GPU::GPUBuffer& mult,
+    const GPU::GPUBuffer& lhs,
+    GPU::GPUBuffer& res
+) {
+    GPUSimulation::GPUSparseMatrix& m = matrices[matrix];
+    GPU::ScopedGPUContext ctxGuard(context);
+    const GPU::Dim3 blockSize(512);
+    const GPU::Dim3 gridSize((m.getDenseRowCount() + blockSize.x) / blockSize.x);
+    const int rowCount = m.getDenseRowCount();
+    void* kernelParams[] = {
+        (void*)&rowCount,
+        (void*)&m.getRowStartHandle(),
+        (void*)&m.getColumnIndexHandle(),
+        (void*)&m.getValuesHandle(),
+        (void*)&lhs.getHandle(),
+        (void*)&mult.getHandle(),
+        (void*)&res.getHandle()
+    };
+    GPU::KernelLaunchParams params(
+        blockSize,
+        gridSize,
+        kernelParams
+    );
+    return callKernelSync(spRMultSub_kernel, params);
 }
 
 GPUSimulationDeviceManager::GPUSimulationDeviceManager() : 

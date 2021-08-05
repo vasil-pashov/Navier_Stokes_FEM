@@ -251,6 +251,7 @@ GPUBuffer::GPUBuffer(int64_t byteSize) :
 {
     EC::ErrorCode ec = CHECK_CUDA_ERROR(cuMemAlloc(&handle, byteSize));
     if(ec.hasError()) {
+        assert(false);
         fprintf(stderr, "%s\n", ec.getMessage());
         handle = 0;
         byteSize = 0;
