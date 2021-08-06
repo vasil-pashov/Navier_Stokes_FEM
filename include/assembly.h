@@ -15,7 +15,7 @@
 #include "kd_tree_builder.h"
 
 // If this is defined GPU devices will be initialized and load all available kernels
-// #define SETUP_GPU
+// #define GPU_SETUP
 
 // If this is defined the KD tree will be uploaded to the GPU and the advection phase will be performed on the GPU.
 // This requires SETUP_GPU to be defined
@@ -25,7 +25,7 @@
 // for diffusion, pressure and velocity will be computed
 #define USE_PRECONDITIONING
 
-#ifdef SETUP_GPU
+#ifdef GPU_SETUP
 #include "gpu_simulation_device.h"
 #endif
 
@@ -299,7 +299,7 @@ private:
         V
     };
 
-#ifdef SETUP_GPU
+#ifdef GPU_SETUP
     /// A Device manager which owns all GPU devices which will be used for simulation purposes.
     /// It loads the simulation kernels for each device and is used to call each kernel.
     /// @note Multi device simulation is not supported at this moment.
@@ -446,9 +446,11 @@ private:
         real* const vVelocityOut
     );
 
+#ifdef GPU_SETUP
     GPUSimulation::GPUSimulationDevice& getSelectedGPUDevice() {
         return gpuDevman.getDevice(0);
     }
+#endif
     
     template<typename Shape>
     struct LocalStiffnessFunctor {

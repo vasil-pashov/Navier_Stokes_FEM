@@ -13,7 +13,7 @@ __global__ void spRMult(
     const int* rowStart,
     const int* columnIndex,
     const float* values,
-    const float* rhs,
+    const float* mult,
     float* res
 ) {
     const unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
@@ -54,7 +54,7 @@ __global__ void spRMultSub(
     float sum = 0.0f;
     for(int i = currentRowStart; i < currentRowEnd; ++i) {
         const int column = columnIndex[i];
-        sum += values[i] * x[column];
+        sum += values[i] * mult[column];
     }
-    res[row] = lhs - sum;
+    res[row] = lhs[row] - sum;
 }
