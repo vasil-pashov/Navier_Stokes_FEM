@@ -21,9 +21,17 @@
 // This requires SETUP_GPU to be defined
 // #define GPU_ADVECTION
 
+// If this is defined all matrices will be uploaded to the GPU. Conjugate Gradient will use GPU implementation
+// of the vector matrix product.
+#define GPU_CONJUGATE_GRADIENT
+
+#if defined(GPU_CONJUGATE_GRADIENT) || defined(GPU_ADVECTION)
+    #define GPU_SETUP
+#endif
+
 // If this is defined Preconditioned Conjugate Gradient will be used and IC0 preconditioning matrices
 // for diffusion, pressure and velocity will be computed
-#define USE_PRECONDITIONING
+// #define USE_PRECONDITIONING
 
 #ifdef GPU_SETUP
 #include "gpu_simulation_device.h"
@@ -298,14 +306,6 @@ private:
         U,
         V
     };
-
-#ifdef GPU_SETUP
-    /// A Device manager which owns all GPU devices which will be used for simulation purposes.
-    /// It loads the simulation kernels for each device and is used to call each kernel.
-    /// @note Multi device simulation is not supported at this moment.
-    GPUSimulation::GPUSimulationDeviceManager gpuDevman;
-#endif
-
     /// Unstructured triangluar grid where the fulid simulation will be computed
     FemGrid2D grid;
 
@@ -447,6 +447,11 @@ private:
     );
 
 #ifdef GPU_SETUP
+    /// A Device manager which owns all GPU devices which will be used for simulation purposes.
+    /// It loads the simulation kernels for each device and is used to call each kernel.
+    /// @note Multi device simulation is not supported at this moment.
+    GPUSimulation::GPUSimulationDeviceManager gpuDevman;
+
     GPUSimulation::GPUSimulationDevice& getSelectedGPUDevice() {
         return gpuDevman.getDevice(0);
     }
@@ -651,7 +656,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
     }
     KDTreeBuilder builder;
     kdTreeCPUOwner = builder.buildCPUOwner(&grid);
-#ifdef GPU_ADVECTION
+#ifdef GPU_SETUP
     RETURN_ON_ERROR_CODE(gpuDevman.init());
 #endif
     return EC::ErrorCode();
@@ -1041,9 +1046,12 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     } else {
         printf("Output folder: %s\n", outFolder.c_str());
     }
+#ifdef GPU_SETUP
+    auto& gpuDevice = getSelectedGPUDevice();
+#endif
 
 #ifdef GPU_ADVECTION
-    RETURN_ON_ERROR_CODE(gpuDevman.getDevice(0).uploadKDTree(kdTreeCPUOwner));
+    RETURN_ON_ERROR_CODE(gpuDevice.uploadKDTree(kdTreeCPUOwner));
 #endif
 
     PROFILING_SCOPED_TIMER_FUN()
@@ -1063,9 +1071,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             triplet.init(grid.getNodesCount(), grid.getNodesCount(), -1);
             assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
 
-#ifdef GPU_PRESSURE_PROJECTION
-            gpuDevman.getDevice(0).uploadMatrix(
-                GPUSimulation::GPUSimulationDevice::SimMatix::velocityMass,
+#ifdef GPU_CONJUGATE_GRADIENT
+            gpuDevice.uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::velocityMass,
                 triplet
             );
 #else
@@ -1116,9 +1124,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 triplet,
                 dirichletWeightsTriplet
             );
-#ifdef GPU_PRESSURE_PROJECTION
-            gpuDevman.getDevice(0).uploadMatrix(
-                GPUSimulation::GPUSimulationDevice::SimMatix::diffusion,
+#ifdef GPU_CONJUGATE_GRADIENT
+            gpuDevice.uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::diffusion,
                 triplet
             );
 #else
@@ -1158,9 +1166,9 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 triplet,
                 dirichletWeightsTriplet
             );
-#ifdef GPU_PRESSURE_PROJECTION
-            gpuDevman.getDevice(0).uploadMatrix(
-                GPUSimulation::GPUSimulationDevice::SimMatix::pressureStiffness,
+#ifdef GPU_CONJUGATE_GRADIENT
+            gpuDevice.uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::pressureSitffness,
                 triplet
             );
 #else
@@ -1190,10 +1198,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             assembleDivergenceMatrix<PressureShape, VelocityShape, true>(triplet);
             // TODO: Make the multiplication with scalar multithreaded. Question: should this line stay
             // here then?
-#ifdef GPU_PRESSURE_PROJECTION
+#ifdef GPU_CONJUGATE_GRADIENT
             triplet *= -dtInv;
-            gpuDevman.getDevice(0).uploadMatrix(
-                GPUSimulation::GPUSimulationDevice::SimMatix::velocityDivergence,
+            gpuDevice.uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::velocityDivergence,
                 triplet
             );
 #else
@@ -1210,10 +1218,10 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             assembleDivergenceMatrix<VelocityShape, PressureShape, false>(triplet);
             // TODO: Make the multiplication with scalar multithreaded. Question: should this line stay
             // here then?
-#ifdef GPU_PRESSURE_PROJECTION
+#ifdef GPU_CONJUGATE_GRADIENT
             triplet *= -dt;
-            gpuDevman.getDevice(0).uploadMatrix(
-                GPUSimulation::GPUSimulationDevice::SimMatix::pressureDivergence,
+            gpuDevice.uploadMatrix(
+                GPUSimulation::GPUSimulationDevice::pressureDivergence,
                 triplet
             );
 #else

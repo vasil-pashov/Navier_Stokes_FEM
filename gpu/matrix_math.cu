@@ -8,7 +8,7 @@
 /// the values of the elements in the row.
 /// @param[in] mult The vector which multiples the matrix (should not overlap with res)
 /// @param[out] res The result of the vector matrix product (should not overlap with mult)
-__global__ void spRMult(
+extern "C" __global__ void spRMult(
     const int rows,
     const int* rowStart,
     const int* columnIndex,
@@ -39,7 +39,7 @@ __global__ void spRMult(
 /// @param[in] lhs The vector from which A * rhs will be subtracted (can overlap with res)
 /// @param[in] mult The vector which multiples the matrix (should not overlap with res)
 /// @param[out] res The result of the vector matrix product (should not overlap with rhs, can overlap with lhs)
-__global__ void spRMultSub(
+extern "C" __global__ void spRMultSub(
     const int rows,
     const int* rowStart,
     const int* columnIndex,

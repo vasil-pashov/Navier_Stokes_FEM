@@ -48,8 +48,17 @@ struct Dim3 {
 };
 
 struct ScopedGPUContext {
-    explicit ScopedGPUContext(CUcontext ctx) : ctx(ctx) {
-        cuCtxPushCurrent(ctx);
+    explicit ScopedGPUContext(CUcontext ctx) :
+        ctx(ctx),
+        shouldPop(false)
+    {
+        CUcontext currentCtx;
+        CUresult res = cuCtxGetCurrent(&currentCtx);
+        assert(res == CUDA_SUCCESS);
+        if(currentCtx != ctx) {
+            shouldPop = true;
+            cuCtxPushCurrent(ctx);
+        }
     }
 
     ScopedGPUContext(const ScopedGPUContext&) = delete;
@@ -59,12 +68,15 @@ struct ScopedGPUContext {
     ScopedGPUContext& operator=(ScopedGPUContext&&) = delete;
 
     ~ScopedGPUContext() {
-        CUcontext popped;
-        cuCtxPopCurrent(&popped);
-        assert(ctx == popped);
+        if(shouldPop) {
+            CUcontext popped;
+            cuCtxPopCurrent(&popped);
+            assert(ctx == popped);
+        }
     }
 private:
     CUcontext ctx;
+    bool shouldPop;
 };
 
 struct KernelLaunchParams {

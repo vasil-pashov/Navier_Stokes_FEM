@@ -14,7 +14,7 @@ namespace GPUSimulation {
     friend class GPUSimulationDeviceManager;
     public:
         enum SimMatrix {
-            pressureSitffnes,
+            pressureSitffness,
             velocityMass,
             diffusion,
             velocityDivergence,
