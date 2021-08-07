@@ -1198,16 +1198,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             assembleDivergenceMatrix<PressureShape, VelocityShape, true>(triplet);
             // TODO: Make the multiplication with scalar multithreaded. Question: should this line stay
             // here then?
-#ifdef GPU_CONJUGATE_GRADIENT
-            triplet *= -dtInv;
-            gpuDevice.uploadMatrix(
-                GPUSimulation::GPUSimulationDevice::velocityDivergence,
-                triplet
-            );
-#else
             velocityDivergenceMatrix.init(triplet);
             velocityDivergenceMatrix *= -dtInv;
-#endif
         }
     });
 
@@ -1218,16 +1210,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             assembleDivergenceMatrix<VelocityShape, PressureShape, false>(triplet);
             // TODO: Make the multiplication with scalar multithreaded. Question: should this line stay
             // here then?
-#ifdef GPU_CONJUGATE_GRADIENT
-            triplet *= -dt;
-            gpuDevice.uploadMatrix(
-                GPUSimulation::GPUSimulationDevice::pressureDivergence,
-                triplet
-            );
-#else
             pressureDivergenceMatrix.init(triplet);
             pressureDivergenceMatrix *= -dt;
-#endif
         }
     });
 
@@ -1293,7 +1277,19 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 }
             }
         }
-
+#ifdef GPU_CONJUGATE_GRADIENT
+        {
+            const EC::ErrorCode status = gpuDevice.conjugateGradient(
+                GPUSimulation::GPUSimulationDevice::pressureSitffness,
+                static_cast<real*>(pressureRhs),
+                static_cast<real*>(currentPressureSolution),
+                static_cast<real*>(currentPressureSolution),
+                -1,
+                eps
+            );
+            assert(!status.hasError());
+        }
+#else
         // Finally solve the linear system for the pressure
         solveStatus = SMM::ConjugateGradient(
             pressureStiffnessMatrix,
@@ -1307,6 +1303,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             #endif
         );
         assert(solveStatus == SMM::SolverStatus::SUCCESS);
+#endif
 
         // After the pressure is found, we must use it to find the "tentative" velocity.
         // First find the right hand side of the tentative velocity.
@@ -1318,7 +1315,19 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         // U and v components of the tentative velocity and the u and v components of the diffused velocity are independent.
         // This function can find one final velocity component. It first finds the tentative velocity and then perfrms the diffusion.
         auto diffusionSolve = [&](real* currentVelocitySolution, real* velocityRhs, real* advectedVelocity, VelocityChannel ch) {
-            
+#ifdef GPU_CONJUGATE_GRADIENT
+            {
+                const EC::ErrorCode status = gpuDevice.conjugateGradient(
+                    GPUSimulation::GPUSimulationDevice::velocityMass,
+                    static_cast<real*>(velocityRhs),
+                    static_cast<real*>(advectedVelocity),
+                    static_cast<real*>(currentVelocitySolution),
+                    -1,
+                    eps
+                );
+                assert(!status.hasError());
+            }
+#else
             // Find the tentative velocity 
             SMM::SolverStatus status = SMM::ConjugateGradient(
                 velocityMassMatrix,
@@ -1332,7 +1341,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 #endif
             );
             assert(status == SMM::SolverStatus::SUCCESS);
-
+#endif
             for(int i = 0; i < nodesCount; ++i) {
                 currentVelocitySolution[i] += advectedVelocity[i];
             }
@@ -1363,7 +1372,19 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                     }
                 }
             }
-
+#ifdef GPU_CONJUGATE_GRADIENT
+            {
+                const EC::ErrorCode status = gpuDevice.conjugateGradient(
+                    GPUSimulation::GPUSimulationDevice::diffusion,
+                    static_cast<real*>(velocityRhs),
+                    static_cast<real*>(currentVelocitySolution),
+                    static_cast<real*>(currentVelocitySolution),
+                    -1,
+                    eps
+                );
+                assert(!status.hasError());
+            }
+#else
             // Find the final velocity at the current time step
             status = SMM::ConjugateGradient(
                 diffusionMatrix,
@@ -1377,6 +1398,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 #endif
             );
             assert(status == SMM::SolverStatus::SUCCESS);
+#endif
         };
 
         // Multithreaded per channel computation is commented until tests are made to clear out

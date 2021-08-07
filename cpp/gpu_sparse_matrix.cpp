@@ -38,6 +38,10 @@ EC::ErrorCode GPUSparseMatrix::upload(const SMM::TripletMatrix<float>& triplet) 
     const int64_t columnIndexByteSize = nnz * sizeof(int);
     const int64_t valuesByteSize = nnz * sizeof(float);
 
+    RETURN_ON_ERROR_CODE(rowStartBuffer.init(rowStartByteSize));
+    RETURN_ON_ERROR_CODE(columnIndexBuffer.init(columnIndexByteSize));
+    RETURN_ON_ERROR_CODE(valuesBuffer.init(valuesByteSize));
+
     RETURN_ON_ERROR_CODE(rowStartBuffer.uploadBuffer(start.data(), rowStartByteSize));
     RETURN_ON_ERROR_CODE(columnIndexBuffer.uploadBuffer(positions.data(), columnIndexByteSize));
     RETURN_ON_ERROR_CODE(valuesBuffer.uploadBuffer(values.data(), valuesByteSize));
