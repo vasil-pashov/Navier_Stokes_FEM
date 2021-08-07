@@ -60,3 +60,20 @@ extern "C" __global__ void spRMultSub(
     }
     res[row] = lhs[row] - sum;
 }
+
+/// Perform a * x + y where a is scalar, x and y are vectors. The result is stored in y
+/// @param[in] vectorLength The number of elemens in both x and y vectors
+/// @param[in] a The scalar which will multiply each element of x vector
+/// @param[in] x x vector from the equation y = a * x + y
+/// @param[in] y y vector from the equation y = a * x + y. The result is stored in this vector
+extern "C" __global__ void saxpy(
+    const int vectorLength,
+    const float a,
+    const float* x,
+    float* y
+) {
+  const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
+  if (i < vectorLength) {
+      y[i] = a*x[i] + y[i];
+  }
+}
