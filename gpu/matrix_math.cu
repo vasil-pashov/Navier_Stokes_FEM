@@ -17,6 +17,7 @@ extern "C" __global__ void spRMult(
     float* res
 ) {
     const unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
+    if(row >= rows) return;
     const int currentRowStart = rowStart[row];
     const int currentRowEnd = rowStart[row + 1];
     float sum = 0.0f;
@@ -49,6 +50,7 @@ extern "C" __global__ void spRMultSub(
     float* res
 ) {
     const unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
+    if(row >= rows) return;
     const int currentRowStart = rowStart[row];
     const int currentRowEnd = rowStart[row + 1];
     float sum = 0.0f;

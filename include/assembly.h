@@ -1064,7 +1064,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
     LocalMassFunctor<VelocityShape> localVelocityMass;
     SMM::CSRMatrix<real>::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
-    g.run([&](){
+    g.run([&]() {
         SMM::TripletMatrix<real> triplet;
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build velocity mass matrix");
@@ -1072,6 +1072,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             assembleMatrix<VelocityShape::size, VelocityShape::size>(localVelocityMass, triplet);
 
 #ifdef GPU_CONJUGATE_GRADIENT
+            velocityMassMatrix.init(triplet);
             gpuDevice.uploadMatrix(
                 GPUSimulation::GPUSimulationDevice::velocityMass,
                 triplet
@@ -1109,7 +1110,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     SMM::CSRMatrix<real> diffusionMatrix;
     SMM::CSRMatrix<real>::IC0Preconditioner diffusionIC0(diffusionMatrix);
     SMM::CSRMatrix<real> velocityDirichletWeights;
-    g.run([&](){
+    g.run([&]() {
         SMM::TripletMatrix<real> triplet;
         std::unordered_set<int> allBoundaryNodes;
         SMM::TripletMatrix<real> dirichletWeightsTriplet;
@@ -1150,7 +1151,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
     SMM::CSRMatrix<real> pressureDirichletWeights;
     SMM::CSRMatrix<real>::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
-    g.run([&](){
+    g.run([&]() {
         SMM::TripletMatrix<real> triplet;
         std::unordered_set<int> allBoundaryNodes;
         SMM::TripletMatrix<real> dirichletWeightsTriplet;
@@ -1191,7 +1192,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     // ======================================================================
 
     const real dtInv = real(1) / dt;
-    g.run([&](){
+    g.run([&]() {
         SMM::TripletMatrix<real> triplet;
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build velocity divergence matrix");
@@ -1203,7 +1204,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         }
     });
 
-    g.run_and_wait([&](){
+    g.run_and_wait([&]() {
         SMM::TripletMatrix<real> triplet;
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build pressure divergence matrix");

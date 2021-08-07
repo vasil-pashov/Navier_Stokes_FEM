@@ -52,6 +52,7 @@ namespace GPUSimulation {
             int maxIterations,
             float eps
         ) {
+            GPU::ScopedGPUContext ctxGuard(context);
             GPUSparseMatrix& a = matrices[matrix];
             // The algorithm in pseudo code is as follows:
             // 1. r_0 = b - A.x_0
@@ -65,17 +66,18 @@ namespace GPUSimulation {
             const int rows = a.getDenseRowCount();
             const int64_t byteSize = rows * sizeof(float);
             GPU::GPUBuffer pDev, apDev, bDev;
-            {
-                GPU::ScopedGPUContext ctxGuard(context);
-                RETURN_ON_ERROR_CODE(pDev.init(byteSize));
-                RETURN_ON_ERROR_CODE(apDev.init(byteSize));
-                RETURN_ON_ERROR_CODE(apDev.uploadBuffer(x0, byteSize));
-                RETURN_ON_ERROR_CODE(bDev.init(byteSize));
-                RETURN_ON_ERROR_CODE(bDev.uploadBuffer(b, byteSize));
-            }
+
+            RETURN_ON_ERROR_CODE(pDev.init(byteSize));
+            RETURN_ON_ERROR_CODE(apDev.init(byteSize));
+            RETURN_ON_ERROR_CODE(bDev.init(byteSize));
+
+            RETURN_ON_ERROR_CODE(apDev.uploadBuffer(x0, byteSize));
+
+            RETURN_ON_ERROR_CODE(bDev.uploadBuffer(b, byteSize));
+
             const float epsSuared = eps * eps;
             SMM::Vector<float> r(rows, 0);
-            RETURN_ON_ERROR_CODE(spRMultSub(matrix, bDev, apDev, pDev));
+            RETURN_ON_ERROR_CODE(spRMultSub(matrix, apDev, bDev, pDev));
             RETURN_ON_ERROR_CODE(pDev.downloadBuffer(r.begin()));
             // a.rMultSub(b, x0, r);
 

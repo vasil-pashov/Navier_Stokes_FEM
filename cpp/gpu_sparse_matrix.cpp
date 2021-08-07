@@ -12,7 +12,7 @@ EC::ErrorCode GPUSparseMatrix::upload(const SMM::TripletMatrix<float>& triplet) 
         count[el.getRow()]++;
     }
 
-    std::vector<int> start(n);
+    std::vector<int> start(n+1);
     start[0] = 0;
     for (int i = 0; i < n; ++i) {
         start[i + 1] = start[i] + count[i];
@@ -34,7 +34,7 @@ EC::ErrorCode GPUSparseMatrix::upload(const SMM::TripletMatrix<float>& triplet) 
 		
 
 
-    const int64_t rowStartByteSize = n * sizeof(int);
+    const int64_t rowStartByteSize = start.size() * sizeof(int);
     const int64_t columnIndexByteSize = nnz * sizeof(int);
     const int64_t valuesByteSize = nnz * sizeof(float);
 

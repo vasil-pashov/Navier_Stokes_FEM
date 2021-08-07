@@ -148,6 +148,11 @@ EC::ErrorCode GPUSimulationDevice::spRMult(
     return callKernelSync(spRMult_kernel, params);
 }
 
+/// Perform operation: lhs - matrix * mult (multily matrix by vector mult and subtract this from lhs)
+/// @param[in] matrix Enum value from GPUSimulationDevice::SimMatrix representing the matrix which will be multiplied
+/// @param[in] mult The vector which will multiply the matrix (the vector being on the right hand side of the matrix)
+/// @param[in] lhs The vector from which matrix * mult will be subtracted
+/// @param[in] res The vector holding the result. It can overlap with lhs if needed.
 EC::ErrorCode GPUSimulationDevice::spRMultSub(
     const SimMatrix matrix,
     const GPU::GPUBuffer& mult,
