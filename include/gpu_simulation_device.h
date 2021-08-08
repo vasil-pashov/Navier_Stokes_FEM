@@ -84,13 +84,28 @@ namespace GPUSimulation {
 
         GPUSimulation::GPUSparseMatrix matrices[SimMatrix::count];
 
-        CUmodule advectionModule;
-        CUmodule sparseMatrixModule;
+        enum class Modules {
+            advection,
+            sparseMatrix,
+            count
+        };
 
-        CUfunction advection_kernel;
-        CUfunction spRMult_kernel;
-        CUfunction spRMultSub_kernel;
-        CUfunction saxpy_kernel;
+        enum class AdvectionKernels {
+            advect,
+            count
+        };
+
+        enum class SparseMatrixKernels {
+            spRMult,
+            spRMultSub,
+            saxpy,
+            dotProduct,
+            count
+        };
+
+        CUmodule modules[int(Modules::count)];
+        CUfunction advectionKernels[int(AdvectionKernels::count)];
+        CUfunction sparseMatrixKernels[int(SparseMatrixKernels::count)];
 
         NSFem::KDTreeGPUOwner kdTree;
 

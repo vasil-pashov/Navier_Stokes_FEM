@@ -53,7 +53,7 @@ struct ScopedGPUContext {
         shouldPop(false)
     {
         CUcontext currentCtx;
-        CUresult res = cuCtxGetCurrent(&currentCtx);
+        [[maybe_unused]]CUresult res = cuCtxGetCurrent(&currentCtx);
         assert(res == CUDA_SUCCESS);
         if(currentCtx != ctx) {
             shouldPop = true;

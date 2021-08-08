@@ -65,7 +65,7 @@ extern "C" __global__ void spRMultSub(
 /// @param[in] vectorLength The number of elemens in both x and y vectors
 /// @param[in] a The scalar which will multiply each element of x vector
 /// @param[in] x x vector from the equation y = a * x + y
-/// @param[in] y y vector from the equation y = a * x + y. The result is stored in this vector
+/// @param[inout] y y vector from the equation y = a * x + y. The result is stored in this vector
 extern "C" __global__ void saxpy(
     const int vectorLength,
     const float a,
@@ -76,4 +76,37 @@ extern "C" __global__ void saxpy(
   if (i < vectorLength) {
       y[i] = a*x[i] + y[i];
   }
+}
+
+/// Perform dot product between a and b vectors and store in result
+/// @param[in] vectorLength The length of both a and b vectors
+/// @param[in] a The first vector to dot
+/// @param[in] b The second vector to dot
+/// @param[out] result The result from dot(a, b)
+extern "C" __global__ void dotProduct(
+    const int vectorLength,
+    const float* a,
+    const float* b,
+    float* result
+) {
+    __shared__ float cache[512];
+
+    const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
+    const int cacheIndex = threadIdx.x;
+    if(i < vectorLength) {
+        cache[cacheIndex] = a[i] * b[i];
+    } else {
+        cache[cacheIndex] = 0.0f;
+    }
+    __syncthreads();
+
+    for(int i = blockDim.x / 2; i > 0; i /= 2) {
+        if(cacheIndex < i) {
+            cache[cacheIndex] += cache[cacheIndex + i];
+        }
+        __syncthreads();
+    }
+    if(cacheIndex == 0) {
+        atomicAdd(result, cache[0]);
+    }
 }

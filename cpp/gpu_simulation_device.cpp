@@ -13,43 +13,44 @@ EC::ErrorCode GPUSimulationDevice::loadModules(const char* advectionData, const 
 }
 
 EC::ErrorCode GPUSimulationDevice::loadAdvectionModule(const char* data) {
-    const int kernelCount = 1;
+    const int kernelCount = int(AdvectionKernels::count);
     std::array<const char*, kernelCount> kernelsToExtract = {
         "advect"
     };
 
     std::array<CUfunction*, kernelCount> kernelPointers = {
-        &advection_kernel
+        &advectionKernels[int(AdvectionKernels::advect)]
     };
 
     return loadModule(
         data,
         kernelsToExtract.data(),
         kernelCount,
-        advectionModule,
+        modules[int(Modules::advection)],
         kernelPointers.data()
     );
 }
 
 EC::ErrorCode GPUSimulationDevice::loadSparseMatrixModule(const char* data) {
-    const int kernelCount = 3;
+    const int kernelCount = int(SparseMatrixKernels::count);
+    // Warrning order must match with the one in SparseMatrixKernels enum
     std::array<const char*, kernelCount> kernelsToExtract = {
         "spRMult",
         "spRMultSub",
-        "saxpy"
+        "saxpy",
+        "dotProduct"
     };
 
-    std::array<CUfunction*, kernelCount> kernelPointers = {
-        &spRMult_kernel,
-        &spRMultSub_kernel,
-        &saxpy_kernel
-    };
+    std::array<CUfunction*, kernelCount> kernelPointers;
+    for(int i = 0; i < kernelCount; ++i) {
+        kernelPointers[i] = &sparseMatrixKernels[i];
+    }
 
     return loadModule(
         data,
         kernelsToExtract.data(),
         kernelCount,
-        sparseMatrixModule,
+        modules[int(Modules::sparseMatrix)],
         kernelPointers.data()
     );
 }
@@ -109,7 +110,7 @@ EC::ErrorCode GPUSimulationDevice::advect(
         gridSize,
         kernelParams
     );
-    RETURN_ON_ERROR_CODE(callKernelSync(advection_kernel, params));
+    RETURN_ON_ERROR_CODE(callKernelSync(advectionKernels[int(AdvectionKernels::advect)], params));
     RETURN_ON_ERROR_CODE(uVelocityOutBuffer.downloadBuffer(uVelocityOut));
     RETURN_ON_ERROR_CODE(vVelocityOutBuffer.downloadBuffer(vVelocityOut));
     return EC::ErrorCode();
@@ -147,7 +148,7 @@ EC::ErrorCode GPUSimulationDevice::spRMult(
         gridSize,
         kernelParams
     );
-    return callKernelSync(spRMult_kernel, params);
+    return callKernelSync(sparseMatrixKernels[int(SparseMatrixKernels::spRMult)], params);
 }
 
 /// Perform operation: lhs - matrix * mult (multily matrix by vector mult and subtract this from lhs)
@@ -180,7 +181,7 @@ EC::ErrorCode GPUSimulationDevice::spRMultSub(
         gridSize,
         kernelParams
     );
-    return callKernelSync(spRMultSub_kernel, params);
+    return callKernelSync(sparseMatrixKernels[int(SparseMatrixKernels::spRMultSub)], params);
 }
 
 EC::ErrorCode GPUSimulationDevice::saxpy(
@@ -203,7 +204,7 @@ EC::ErrorCode GPUSimulationDevice::saxpy(
         gridSize,
         kernelParams
     );
-    return callKernelSync(saxpy_kernel, params);
+    return callKernelSync(sparseMatrixKernels[int(SparseMatrixKernels::saxpy)], params);
 }
 
 EC::ErrorCode GPUSimulationDevice::conjugateGradient(
