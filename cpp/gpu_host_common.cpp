@@ -127,7 +127,7 @@ EC::ErrorCode GPUDeviceBase::loadModule(
     return EC::ErrorCode();
 }
 
-EC::ErrorCode GPUDeviceBase::callKernelSync(CUfunction kernel, const KernelLaunchParams& launchParams) {
+EC::ErrorCode GPUDeviceBase::callKernel(CUfunction kernel, const KernelLaunchParams& launchParams) {
     RETURN_ON_CUDA_ERROR(cuLaunchKernel(
         kernel,
         launchParams.gridSize.x, launchParams.gridSize.y, launchParams.gridSize.z,
@@ -302,9 +302,9 @@ EC::ErrorCode GPUBuffer::copyFrom(const GPUBuffer& source) {
     return CHECK_CUDA_ERROR(cuMemcpyDtoD(handle, source.handle, byteSize));
 }
 
-EC::ErrorCode GPUBuffer::copyFromAsync(const GPUBuffer& source) {
+EC::ErrorCode GPUBuffer::copyFromAsync(const GPUBuffer& source, CUstream stream) {
     assert(source.byteSize == byteSize);
-    return CHECK_CUDA_ERROR(cuMemcpyDtoDAsync(handle, source.handle, byteSize));
+    return CHECK_CUDA_ERROR(cuMemcpyDtoDAsync(handle, source.handle, byteSize, stream));
 }
 
 

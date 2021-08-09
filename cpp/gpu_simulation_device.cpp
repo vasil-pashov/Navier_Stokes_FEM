@@ -110,7 +110,7 @@ EC::ErrorCode GPUSimulationDevice::advect(
         gridSize,
         kernelParams
     );
-    RETURN_ON_ERROR_CODE(callKernelSync(advectionKernels[int(AdvectionKernels::advect)], params));
+    RETURN_ON_ERROR_CODE(callKernel(advectionKernels[int(AdvectionKernels::advect)], params));
     RETURN_ON_ERROR_CODE(uVelocityOutBuffer.downloadBuffer(uVelocityOut));
     RETURN_ON_ERROR_CODE(vVelocityOutBuffer.downloadBuffer(vVelocityOut));
     return EC::ErrorCode();
@@ -148,7 +148,7 @@ EC::ErrorCode GPUSimulationDevice::spRMult(
         gridSize,
         kernelParams
     );
-    return callKernelSync(sparseMatrixKernels[int(SparseMatrixKernels::spRMult)], params);
+    return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::spRMult)], params);
 }
 
 /// Perform operation: lhs - matrix * mult (multily matrix by vector mult and subtract this from lhs)
@@ -181,7 +181,7 @@ EC::ErrorCode GPUSimulationDevice::spRMultSub(
         gridSize,
         kernelParams
     );
-    return callKernelSync(sparseMatrixKernels[int(SparseMatrixKernels::spRMultSub)], params);
+    return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::spRMultSub)], params);
 }
 
 EC::ErrorCode GPUSimulationDevice::saxpy(
@@ -204,7 +204,7 @@ EC::ErrorCode GPUSimulationDevice::saxpy(
         gridSize,
         kernelParams
     );
-    return callKernelSync(sparseMatrixKernels[int(SparseMatrixKernels::saxpy)], params);
+    return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::saxpy)], params);
 }
 
 EC::ErrorCode GPUSimulationDevice::dotProduct(
@@ -228,7 +228,7 @@ EC::ErrorCode GPUSimulationDevice::dotProduct(
         gridSize,
         kernelParams
     );
-    return callKernelSync(sparseMatrixKernels[int(SparseMatrixKernels::dotProduct)], params);
+    return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::dotProduct)], params);
 }
 
 EC::ErrorCode GPUSimulationDevice::conjugateGradient(

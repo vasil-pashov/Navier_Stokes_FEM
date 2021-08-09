@@ -129,10 +129,10 @@ public:
         CUmodule& moduleOut,
         CUfunction** kernelsOut
     );
-    /// Launch a GPU kernel and wait for it to finish
+    /// Launch a GPU kernel
     /// @param[in] kernel Handle to the kernel which will be launched
     /// @param[in] kernelParams The parameters for the kernel 
-    EC::ErrorCode callKernelSync(CUfunction kernel, const KernelLaunchParams& kernelParams);
+    EC::ErrorCode callKernel(CUfunction kernel, const KernelLaunchParams& kernelParams);
     ~GPUDeviceBase();
 protected:
     void printDeviceInfo() const;
@@ -252,7 +252,7 @@ public:
     EC::ErrorCode downloadBuffer(void* dst, const int64_t donwloadByteSize, const int64_t srcOffset);
 
     EC::ErrorCode copyFrom(const GPUBuffer& source);
-    EC::ErrorCode copyFromAsync(const GPUBuffer& source);
+    EC::ErrorCode copyFromAsync(const GPUBuffer& source, CUstream stream);
 
     /// Deallocate all GPU memory allocated by the buffer and set its size to 0
     EC::ErrorCode freeMem();
