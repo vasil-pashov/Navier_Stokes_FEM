@@ -78,6 +78,18 @@ namespace GPUSimulation {
             GPU::GPUBuffer& y
         );
         
+        /// Perfrom dot product between two vectors
+        /// @param[in] vectorLength The length of the both vectros
+        /// @param[in] a The first vector
+        /// @param[in] b The second vector
+        /// @param[out] result The result of the dot product between a and b
+        EC::ErrorCode dotProduct(
+            const int vectorLength,
+            const GPU::GPUBuffer& a,
+            const GPU::GPUBuffer& b,
+            GPU::GPUBuffer& result
+        );
+
     private:
         EC::ErrorCode loadAdvectionModule(const char* data);
         EC::ErrorCode loadSparseMatrixModule(const char* data);

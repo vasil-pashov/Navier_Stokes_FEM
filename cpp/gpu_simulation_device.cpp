@@ -207,6 +207,30 @@ EC::ErrorCode GPUSimulationDevice::saxpy(
     return callKernelSync(sparseMatrixKernels[int(SparseMatrixKernels::saxpy)], params);
 }
 
+EC::ErrorCode GPUSimulationDevice::dotProduct(
+    const int vectorLength,
+    const GPU::GPUBuffer& a,
+    const GPU::GPUBuffer& b,
+    GPU::GPUBuffer& result
+) {
+    GPU::ScopedGPUContext ctxGuard(context);
+    // Important must be kept in sync with the size of the shared memory in dotProduct kernel
+    const GPU::Dim3 blockSize(512);
+    const GPU::Dim3 gridSize((vectorLength + blockSize.x) / blockSize.x);
+    void* kernelParams[] = {
+        (void*)&vectorLength,
+        (void*)&a.getHandle(),
+        (void*)&b.getHandle(),
+        (void*)&result.getHandle()
+    };
+    GPU::KernelLaunchParams params(
+        blockSize,
+        gridSize,
+        kernelParams
+    );
+    return callKernelSync(sparseMatrixKernels[int(SparseMatrixKernels::dotProduct)], params);
+}
+
 EC::ErrorCode GPUSimulationDevice::conjugateGradient(
     const SimMatrix matrix,
     const float* const b,
