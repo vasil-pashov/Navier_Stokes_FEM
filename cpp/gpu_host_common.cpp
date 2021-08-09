@@ -305,4 +305,51 @@ EC::ErrorCode GPUBuffer::freeMem() {
     return ec;
 }
 
+CPUPinnedBuffer::CPUPinnedBuffer() :
+    data(nullptr),
+    byteSize(0)
+{
+
+}
+
+CPUPinnedBuffer::CPUPinnedBuffer(CPUPinnedBuffer&& other) :
+    data(other.data),
+    byteSize(other.byteSize)
+{
+    other.byteSize = 0;
+    other.data = nullptr;
+}
+
+CPUPinnedBuffer& CPUPinnedBuffer::operator=(CPUPinnedBuffer&& other) {
+    freeMem();
+    data = other.data;
+    byteSize = other.byteSize;
+    return *this;
+}
+
+CPUPinnedBuffer::~CPUPinnedBuffer() {
+    freeMem();
+}
+
+EC::ErrorCode CPUPinnedBuffer::init(const int64_t byteSize) {
+    RETURN_ON_CUDA_ERROR(cuMemAllocHost(&data, byteSize));
+    this->byteSize = byteSize;
+    return EC::ErrorCode();
+}
+
+void* CPUPinnedBuffer::getData() {
+    return data;
+}
+
+void CPUPinnedBuffer::freeMem() {
+    [[maybe_unused]]CUresult res = cuMemFreeHost(data);
+    assert(res == CUDA_SUCCESS);
+    data = nullptr;
+    byteSize = 0;
+}
+
+int64_t CPUPinnedBuffer::getByteSize() const {
+    return byteSize;
+}
+
 }

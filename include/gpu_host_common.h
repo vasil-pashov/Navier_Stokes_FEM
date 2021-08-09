@@ -274,4 +274,25 @@ private:
     int64_t byteSize;
 };
 
+/// A class which wraps arround a CPU memory which is pinned (or page locked)
+/// Such memory is guaranteed by the OS to not be paged out of the main memory
+/// Using such buffers gives CUDA options to optimize data transfer and makes
+/// it possible to map CPU <-> GPU memory.
+class CPUPinnedBuffer {
+public:
+    CPUPinnedBuffer();
+    CPUPinnedBuffer(const CPUPinnedBuffer&) = delete;
+    CPUPinnedBuffer& operator=(const CPUPinnedBuffer&) = delete;
+    CPUPinnedBuffer(CPUPinnedBuffer&&);
+    ~CPUPinnedBuffer();
+    CPUPinnedBuffer& operator=(CPUPinnedBuffer&&);
+    EC::ErrorCode init(const int64_t byteSize);
+    void* getData();
+    int64_t getByteSize() const;
+    void freeMem();
+private:
+    void* data;
+    int64_t byteSize;
+};
+
 } // namespace GPU
