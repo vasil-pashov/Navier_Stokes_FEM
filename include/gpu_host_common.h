@@ -251,6 +251,9 @@ public:
     /// The CPU buffer must be preallocated and must have byte size greater or equal to donwloadByteSize
     EC::ErrorCode downloadBuffer(void* dst, const int64_t donwloadByteSize, const int64_t srcOffset);
 
+    EC::ErrorCode copyFrom(const GPUBuffer& source);
+    EC::ErrorCode copyFromAsync(const GPUBuffer& source);
+
     /// Deallocate all GPU memory allocated by the buffer and set its size to 0
     EC::ErrorCode freeMem();
 

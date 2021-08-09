@@ -297,6 +297,16 @@ EC::ErrorCode GPUBuffer::downloadBuffer(void* src, int64_t downloadByteSize, con
     return EC::ErrorCode();
 }
 
+EC::ErrorCode GPUBuffer::copyFrom(const GPUBuffer& source) {
+    assert(source.byteSize == byteSize);
+    return CHECK_CUDA_ERROR(cuMemcpyDtoD(handle, source.handle, byteSize));
+}
+
+EC::ErrorCode GPUBuffer::copyFromAsync(const GPUBuffer& source) {
+    assert(source.byteSize == byteSize);
+    return CHECK_CUDA_ERROR(cuMemcpyDtoDAsync(handle, source.handle, byteSize));
+}
+
 
 EC::ErrorCode GPUBuffer::freeMem() {
     EC::ErrorCode ec = CHECK_CUDA_ERROR(cuMemFree(handle));
