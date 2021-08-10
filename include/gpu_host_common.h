@@ -202,20 +202,18 @@ public:
         
     GPUBuffer(const GPUBuffer&) = delete;
     GPUBuffer& operator=(const GPUBuffer&) = delete;
-    GPUBuffer(GPUBuffer&& other) :
-        handle(other.handle),
-        byteSize(other.byteSize)
-    {
-        other.handle = 0;
-        other.byteSize = 0;
-    }
-    GPUBuffer& operator=(GPUBuffer&& other) {
-        handle = other.handle;
-        byteSize = other.byteSize;
-        other.handle = 0;
-        other.byteSize = 0;
-        return *this;
-    }
+
+    /// Move constructor
+    /// @param[in] other The object which is moved into this. Afther the object is constructed
+    /// other will not contain any data, but it will be in an unitialized state and it is ok to call init
+    /// on it.
+    GPUBuffer(GPUBuffer&& other);
+
+    /// Move assignment
+    /// @param[in] other The object which is moved into this. Afther the object is constructed
+    /// other will not contain any data, but it will be in an unitialized and it is ok to call init
+    /// on it.
+    GPUBuffer& operator=(GPUBuffer&& other);
 
     /// Destructor. Will free all GPU memory allocated by the buffe.
     ~GPUBuffer();
@@ -292,9 +290,30 @@ public:
     EC::ErrorCode init(const int64_t byteSize);
     void* getData();
     int64_t getByteSize() const;
-    void freeMem();
+    EC::ErrorCode freeMem();
 private:
     void* data;
+    int64_t byteSize;
+};
+
+/// A CPU buffer which can be mapped to the GPU memory whithout allocating memory on the GPU
+/// The CPU memory allocated will be page locked.
+/// @note The memory access to this on the GPU will be slower compared to GPU buffer
+class MappedBuffer {
+    MappedBuffer();
+    MappedBuffer(const MappedBuffer&) = delete;
+    MappedBuffer& operator=(const MappedBuffer&) = delete;
+    MappedBuffer(MappedBuffer&&);
+    ~MappedBuffer();
+    MappedBuffer& operator=(MappedBuffer&&);
+    EC::ErrorCode init(const int64_t byteSize);
+    void* getCPUAddress();
+    CUdeviceptr& getGPUAddress();
+    int64_t getByteSize() const;
+    EC::ErrorCode freeMem();
+private:
+    void* cpuAddress;
+    CUdeviceptr gpuAddress;
     int64_t byteSize;
 };
 

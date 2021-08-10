@@ -249,7 +249,7 @@ void GPUDeviceBase::printDeviceInfo() const {
 GPUBuffer::GPUBuffer(int64_t byteSize) :
     byteSize(byteSize)
 {
-    EC::ErrorCode ec = CHECK_CUDA_ERROR(cuMemAlloc(&handle, byteSize));
+    const EC::ErrorCode ec = CHECK_CUDA_ERROR(cuMemAlloc(&handle, byteSize));
     if(ec.hasError()) {
         assert(false);
         fprintf(stderr, "%s\n", ec.getMessage());
@@ -258,16 +258,32 @@ GPUBuffer::GPUBuffer(int64_t byteSize) :
     }
 }
 
-GPUBuffer::~GPUBuffer() {
-    freeMem();
+GPUBuffer::GPUBuffer(GPUBuffer&& other) :
+    handle(other.handle),
+    byteSize(other.byteSize)
+{
+    other.handle = 0;
+    other.byteSize = 0;
 }
 
-EC::ErrorCode GPUBuffer::init(int64_t byteSize) {
+GPUBuffer& GPUBuffer::operator=(GPUBuffer&& other) {
+    [[maybe_unused]]const EC::ErrorCode& status = CHECK_CUDA_ERROR(cuMemFree(handle));
+    assert(!status.hasError());
+    handle = other.handle;
+    byteSize = other.byteSize;
+    other.handle = 0;
+    other.byteSize = 0;
+    return *this;
+}
+
+GPUBuffer::~GPUBuffer() {
+    [[maybe_unused]]const EC::ErrorCode& status = freeMem();
+    assert(!status.hasError());
+}
+
+EC::ErrorCode GPUBuffer::init(const int64_t byteSize) {
     if(handle != 0) {
-        const EC::ErrorCode ec = freeMem();
-        if(ec.hasError()) {
-            return ec;
-        }
+        RETURN_ON_ERROR_CODE(freeMem());
     }
     RETURN_ON_CUDA_ERROR(cuMemAlloc(&handle, byteSize));
     this->byteSize = byteSize;
@@ -309,10 +325,10 @@ EC::ErrorCode GPUBuffer::copyFromAsync(const GPUBuffer& source, CUstream stream)
 
 
 EC::ErrorCode GPUBuffer::freeMem() {
-    EC::ErrorCode ec = CHECK_CUDA_ERROR(cuMemFree(handle));
+    const EC::ErrorCode status = CHECK_CUDA_ERROR(cuMemFree(handle));
     handle = 0;
     byteSize = 0;
-    return ec;
+    return status;
 }
 
 CPUPinnedBuffer::CPUPinnedBuffer() :
@@ -331,17 +347,24 @@ CPUPinnedBuffer::CPUPinnedBuffer(CPUPinnedBuffer&& other) :
 }
 
 CPUPinnedBuffer& CPUPinnedBuffer::operator=(CPUPinnedBuffer&& other) {
-    freeMem();
+    [[maybe_unused]]const EC::ErrorCode& status = CHECK_CUDA_ERROR(cuMemFreeHost(data));
+    assert(status == CUDA_SUCCESS);
     data = other.data;
     byteSize = other.byteSize;
+    other.data = nullptr;
+    other.byteSize = 0;
     return *this;
 }
 
 CPUPinnedBuffer::~CPUPinnedBuffer() {
-    freeMem();
+    [[maybe_unused]]const EC::ErrorCode status = freeMem();
+    assert(!status.hasError());
 }
 
 EC::ErrorCode CPUPinnedBuffer::init(const int64_t byteSize) {
+    if(data != nullptr) {
+        RETURN_ON_ERROR_CODE(freeMem());
+    }
     RETURN_ON_CUDA_ERROR(cuMemAllocHost(&data, byteSize));
     this->byteSize = byteSize;
     return EC::ErrorCode();
@@ -351,15 +374,83 @@ void* CPUPinnedBuffer::getData() {
     return data;
 }
 
-void CPUPinnedBuffer::freeMem() {
-    [[maybe_unused]]CUresult res = cuMemFreeHost(data);
-    assert(res == CUDA_SUCCESS);
+EC::ErrorCode CPUPinnedBuffer::freeMem() {
+    const EC::ErrorCode status = CHECK_CUDA_ERROR(cuMemFreeHost(data));
     data = nullptr;
     byteSize = 0;
+    return status;
 }
 
 int64_t CPUPinnedBuffer::getByteSize() const {
     return byteSize;
+}
+
+MappedBuffer::MappedBuffer() :
+    cpuAddress(nullptr),
+    gpuAddress(0),
+    byteSize(0)
+{
+
+}
+
+MappedBuffer::MappedBuffer(MappedBuffer&& other) :
+    cpuAddress(other.cpuAddress),
+    gpuAddress(other.gpuAddress),
+    byteSize(other.byteSize)
+{
+    other.cpuAddress = nullptr;
+    other.gpuAddress = 0;
+    other.byteSize = 0;
+}
+
+MappedBuffer::~MappedBuffer() {
+    [[maybe_unused]]const EC::ErrorCode& status = freeMem();
+    assert(!status.hasError());
+}
+
+MappedBuffer& MappedBuffer::operator=(MappedBuffer&& other) {
+    [[maybe_unused]]const EC::ErrorCode& status = CHECK_CUDA_ERROR(cuMemFreeHost(cpuAddress));
+    assert(!status.hasError());
+
+    cpuAddress = other.cpuAddress;
+    gpuAddress = other.gpuAddress;
+    byteSize = other.byteSize;
+
+    other.cpuAddress = nullptr;
+    other.gpuAddress = 0;
+    other.byteSize = 0;
+    return *this;
+}
+
+EC::ErrorCode MappedBuffer::init(const int64_t byteSize) {
+    if(cpuAddress != nullptr) {
+        RETURN_ON_ERROR_CODE(freeMem());
+    }
+    this->byteSize = byteSize;
+    const unsigned allocFlags = CU_MEMHOSTALLOC_DEVICEMAP;
+    RETURN_ON_CUDA_ERROR(cuMemHostAlloc(&cpuAddress, byteSize, allocFlags));
+    RETURN_ON_CUDA_ERROR(cuMemHostGetDevicePointer(&gpuAddress, cpuAddress, 0));
+    return EC::ErrorCode();
+}
+
+void* MappedBuffer::getCPUAddress() {
+    return cpuAddress;
+}
+
+CUdeviceptr& MappedBuffer::getGPUAddress() {
+    return gpuAddress;
+}
+
+int64_t MappedBuffer::getByteSize() const {
+    return byteSize;
+}
+
+EC::ErrorCode MappedBuffer::freeMem() {
+    const EC::ErrorCode status = CHECK_CUDA_ERROR(cuMemFreeHost(cpuAddress));
+    cpuAddress = nullptr;
+    gpuAddress = 0;
+    byteSize = 0;
+    return status;    
 }
 
 }

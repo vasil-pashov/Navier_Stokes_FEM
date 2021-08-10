@@ -116,6 +116,7 @@ if(NOT MSVC)
 		-fno-exceptions
 		-fno-rtti
 		-ffast-math
+		-Wreturn-type
 	)
 else()
 	target_compile_definitions(${PROJECT_NAME} PRIVATE
