@@ -14,7 +14,7 @@ namespace EC {
 	class ErrorCode {
 	public:
 		ErrorCode();
-		ErrorCode(const char*, ...);
+		explicit ErrorCode(const char*, ...);
 		ErrorCode(int status, const char*, ...);
 		int getStatus() const;
 		const char* getMessage() const;

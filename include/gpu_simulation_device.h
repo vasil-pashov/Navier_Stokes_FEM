@@ -53,8 +53,8 @@ namespace GPUSimulation {
         /// @param[out] res The result of the vector matrix product (should not overlap with rhs, can overlap with lhs) 
         EC::ErrorCode spRMultSub(
             const SimMatrix matrix,
-            const GPU::GPUBuffer& mult,
             const GPU::GPUBuffer& lhs,
+            const GPU::GPUBuffer& mult,
             GPU::GPUBuffer& res
         );
 
