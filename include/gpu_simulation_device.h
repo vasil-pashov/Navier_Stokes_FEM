@@ -66,6 +66,23 @@ namespace GPUSimulation {
             int maxIterations,
             float eps
         );
+
+        /// Perform a * x + b * y where a and b are scalars and x and y are vectors.
+        /// @param[in] vectorLength The number of elements in vectors x and y
+        /// @param[in] a Scalar multiplier for the x vector
+        /// @param[in] b Scalar multiplier for the y vector
+        /// @param[in] x Vector multiplied by a
+        /// @param[in] y Vector multiplied by b
+        /// @param[out] result Vector where the result is stored
+        EC::ErrorCode saxpby(
+            const int vectorLength,
+            const float a,
+            const float b,
+            const GPU::GPUBuffer& x,
+            const GPU::GPUBuffer& y,
+            GPU::GPUBuffer& result
+        );
+
         /// Perform a * x + y where a is scalar, x and y are vectors. The result is stored in y
         /// @param[in] vectorLength The number of elemens in both x and y vectors
         /// @param[in] a The scalar which will multiply each element of x vector
@@ -91,6 +108,12 @@ namespace GPUSimulation {
         );
 
     private:
+        EC::ErrorCode dotProductInternal(
+            const int vectorLength,
+            CUdeviceptr a,
+            CUdeviceptr b,
+            CUdeviceptr result
+        );
         EC::ErrorCode loadAdvectionModule(const char* data);
         EC::ErrorCode loadSparseMatrixModule(const char* data);
 
@@ -112,6 +135,7 @@ namespace GPUSimulation {
             spRMultSub,
             saxpy,
             dotProduct,
+            saxpby,
             count
         };
 

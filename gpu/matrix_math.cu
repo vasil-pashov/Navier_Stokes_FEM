@@ -74,7 +74,28 @@ extern "C" __global__ void saxpy(
 ) {
   const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
   if (i < vectorLength) {
-      y[i] = a*x[i] + y[i];
+      y[i] += a*x[i];
+  }
+}
+
+/// Perform a * x + b * y where a and b are scalars and x and y are vectors.
+/// @param[in] vectorLength The number of elements in vectors x and y
+/// @param[in] a Scalar multiplier for the x vector
+/// @param[in] b Scalar multiplier for the y vector
+/// @param[in] x Vector multiplied by a
+/// @param[in] y Vector multiplied by b
+/// @param[out] result Vector where the result is stored
+extern "C" __global__ void saxpby(
+    const int vectorLength,
+    const float a,
+    const float b,
+    const float* x,
+    const float* y,
+    float* result
+) {
+  const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
+  if (i < vectorLength) {
+      result[i] = a * x[i] + b * y[i];
   }
 }
 

@@ -38,7 +38,8 @@ EC::ErrorCode GPUSimulationDevice::loadSparseMatrixModule(const char* data) {
         "spRMult",
         "spRMultSub",
         "saxpy",
-        "dotProduct"
+        "dotProduct",
+        "saxpby"
     };
 
     std::array<CUfunction*, kernelCount> kernelPointers;
@@ -207,11 +208,52 @@ EC::ErrorCode GPUSimulationDevice::saxpy(
     return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::saxpy)], params);
 }
 
+EC::ErrorCode GPUSimulationDevice::saxpby(
+    const int vectorLength,
+    const float a,
+    const float b,
+    const GPU::GPUBuffer& x,
+    const GPU::GPUBuffer& y,
+    GPU::GPUBuffer& result
+) {
+    GPU::ScopedGPUContext ctxGuard(context);
+    const GPU::Dim3 blockSize(512);
+    const GPU::Dim3 gridSize((vectorLength + blockSize.x) / blockSize.x);
+    void* kernelParams[] = {
+        (void*)&vectorLength,
+        (void*)&a,
+        (void*)&b,
+        (void*)&x.getHandle(),
+        (void*)&y.getHandle(),
+        (void*)&result.getHandle()
+    };
+    GPU::KernelLaunchParams params(
+        blockSize,
+        gridSize,
+        kernelParams
+    );
+    return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::saxpby)], params);   
+}
+
 EC::ErrorCode GPUSimulationDevice::dotProduct(
     const int vectorLength,
     const GPU::GPUBuffer& a,
     const GPU::GPUBuffer& b,
     GPU::GPUBuffer& result
+) {
+    return dotProductInternal(
+        vectorLength,
+        a.getHandle(),
+        b.getHandle(),
+        result.getHandle()
+    );
+}
+
+EC::ErrorCode GPUSimulationDevice::dotProductInternal(
+    const int vectorLength,
+    CUdeviceptr a,
+    CUdeviceptr b,
+    CUdeviceptr result
 ) {
     GPU::ScopedGPUContext ctxGuard(context);
     // Important must be kept in sync with the size of the shared memory in dotProduct kernel
@@ -219,9 +261,9 @@ EC::ErrorCode GPUSimulationDevice::dotProduct(
     const GPU::Dim3 gridSize((vectorLength + blockSize.x) / blockSize.x);
     void* kernelParams[] = {
         (void*)&vectorLength,
-        (void*)&a.getHandle(),
-        (void*)&b.getHandle(),
-        (void*)&result.getHandle()
+        (void*)&a,
+        (void*)&b,
+        (void*)&result
     };
     GPU::KernelLaunchParams params(
         blockSize,
@@ -231,7 +273,7 @@ EC::ErrorCode GPUSimulationDevice::dotProduct(
     return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::dotProduct)], params);
 }
 
-EC::ErrorCode GPUSimulationDevice::conjugateGradient(
+/*EC::ErrorCode GPUSimulationDevice::conjugateGradient(
     const SimMatrix matrix,
     const float* const b,
     const float* const x0,
@@ -314,6 +356,96 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradient(
         RETURN_ON_ERROR_CODE(pDev.uploadBuffer(p.begin(), byteSize));
         currentX = x;
     }
+    return EC::ErrorCode("Max iterations reached!");
+}*/
+
+EC::ErrorCode GPUSimulationDevice::conjugateGradient(
+    const SimMatrix matrix,
+    const float* const b,
+    const float* const x0,
+    float* const xOut,
+    int maxIterations,
+    float eps
+) {
+    using namespace GPU;
+    GPU::ScopedGPUContext ctxGuard(context);
+    GPUSparseMatrix& a = matrices[matrix];
+    // The algorithm in pseudo code is as follows:
+    // 1. r_0 = b - A.x_0
+    // 2. p_0 = r_0
+    // 3. for j = 0, j, ... until convergence/max iteratoions
+    // 4.	alpha_i = (r_j, r_j) / (A.p_j, p_j)
+    // 5.	x_{j+1} = x_j + alpha_j * p_j
+    // 6.	r_{j+1} = r_j - alpha_j * A.p_j
+    // 7. 	beta_j = (r_{j+1}, r_{j+1}) / (r_j, r_j)
+    // 8.	p_{j+1} = r_{j+1} + beta_j * p_j
+    const float epsSuared = eps * eps;
+    const int rows = a.getDenseRowCount();
+    const int64_t byteSize = rows * sizeof(float);
+    GPU::GPUBuffer x, ap, p, r;
+    GPU::MappedBuffer residualNormSquared, pAp, newResidualNormSquared;
+
+    RETURN_ON_ERROR_CODE(ap.init(byteSize));
+    RETURN_ON_ERROR_CODE(p.init(byteSize));
+    RETURN_ON_ERROR_CODE(x.init(byteSize));
+    RETURN_ON_ERROR_CODE(r.init(byteSize));
+
+    RETURN_ON_ERROR_CODE(residualNormSquared.init(sizeof(float)));
+    *static_cast<float*>(residualNormSquared.getCPUAddress()) = 0;
+
+    RETURN_ON_ERROR_CODE(pAp.init(sizeof(float)));
+    *static_cast<float*>(pAp.getCPUAddress()) = 0;
+
+    RETURN_ON_ERROR_CODE(newResidualNormSquared.init(sizeof(float)));
+    *static_cast<float*>(newResidualNormSquared.getCPUAddress()) = 0;
+
+    RETURN_ON_ERROR_CODE(x.uploadBuffer(x0, byteSize));
+    RETURN_ON_ERROR_CODE(p.uploadBuffer(b, byteSize));
+
+    RETURN_ON_ERROR_CODE(spRMultSub(matrix, x, p, r));
+    p.copyFromAsync(r, 0);
+    RETURN_ON_ERROR_CODE(dotProductInternal(
+        rows,
+        r.getHandle(),
+        r.getHandle(),
+        residualNormSquared.getGPUAddress()
+    ));
+
+    RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
+    if(epsSuared > *static_cast<float*>(residualNormSquared.getCPUAddress())) {
+        return 0;
+    }
+    if(maxIterations == -1) {
+        maxIterations = rows;
+    }
+    for(int i = 0; i < maxIterations; ++i) {
+        RETURN_ON_ERROR_CODE(spRMult(matrix, p, ap));
+        RETURN_ON_ERROR_CODE(dotProductInternal(
+            rows,
+            ap.getHandle(),
+            p.getHandle(),
+            pAp.getGPUAddress()
+        ));
+        RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
+        assert(*static_cast<float*>(pAp.getCPUAddress()) != 0);
+        const float alpha = *static_cast<float*>(residualNormSquared.getCPUAddress()) / *static_cast<float*>(pAp.getCPUAddress());
+        RETURN_ON_ERROR_CODE(saxpy(rows, alpha, p, x));
+        RETURN_ON_ERROR_CODE(saxpy(rows, -alpha, ap, r));
+        RETURN_ON_ERROR_CODE(dotProductInternal(
+            rows,
+            r.getHandle(),
+            r.getHandle(),
+            newResidualNormSquared.getGPUAddress()
+        ));
+        RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
+        if(epsSuared > *static_cast<float*>(newResidualNormSquared.getCPUAddress())) {
+            return EC::ErrorCode();
+        }
+        const float beta = *static_cast<float*>(newResidualNormSquared.getCPUAddress()) / *static_cast<float*>(residualNormSquared.getCPUAddress());
+        *static_cast<float*>(residualNormSquared.getCPUAddress()) = *static_cast<float*>(newResidualNormSquared.getCPUAddress());
+        RETURN_ON_ERROR_CODE(saxpby(rows, 1, beta, r, p, p));
+    }
+    RETURN_ON_ERROR_CODE(x.downloadBuffer(xOut));
     return EC::ErrorCode("Max iterations reached!");
 }
 

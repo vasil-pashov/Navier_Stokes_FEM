@@ -300,6 +300,7 @@ private:
 /// The CPU memory allocated will be page locked.
 /// @note The memory access to this on the GPU will be slower compared to GPU buffer
 class MappedBuffer {
+public:
     MappedBuffer();
     MappedBuffer(const MappedBuffer&) = delete;
     MappedBuffer& operator=(const MappedBuffer&) = delete;
