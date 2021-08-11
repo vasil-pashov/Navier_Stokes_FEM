@@ -383,7 +383,8 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradient(
     const int rows = a.getDenseRowCount();
     const int64_t byteSize = rows * sizeof(float);
     GPU::GPUBuffer x, ap, p, r;
-    GPU::MappedBuffer residualNormSquared, pAp, newResidualNormSquared;
+    // TODO: Merge these two into a structure with two elements
+    GPU::MappedBuffer residualNormSquared, pAp;
 
     RETURN_ON_ERROR_CODE(ap.init(byteSize));
     RETURN_ON_ERROR_CODE(p.init(byteSize));
@@ -395,9 +396,6 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradient(
 
     RETURN_ON_ERROR_CODE(pAp.init(sizeof(float)));
     *static_cast<float*>(pAp.getCPUAddress()) = 0;
-
-    RETURN_ON_ERROR_CODE(newResidualNormSquared.init(sizeof(float)));
-    *static_cast<float*>(newResidualNormSquared.getCPUAddress()) = 0;
 
     RETURN_ON_ERROR_CODE(x.uploadBuffer(x0, byteSize));
     RETURN_ON_ERROR_CODE(p.uploadBuffer(b, byteSize));
@@ -420,7 +418,6 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradient(
     }
     for(int i = 0; i < maxIterations; ++i) {
         *static_cast<float*>(pAp.getCPUAddress()) = 0.0f;
-        *static_cast<float*>(newResidualNormSquared.getCPUAddress()) = 0.0f;
 
         RETURN_ON_ERROR_CODE(spRMult(matrix, p, ap));
         RETURN_ON_ERROR_CODE(dotProductInternal(
@@ -432,21 +429,22 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradient(
         RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
 
         assert(*static_cast<float*>(pAp.getCPUAddress()) != 0);
-        const float alpha = *static_cast<float*>(residualNormSquared.getCPUAddress()) / *static_cast<float*>(pAp.getCPUAddress());
+        const float oldResidualNormSquared = *static_cast<float*>(residualNormSquared.getCPUAddress());
+        const float alpha = oldResidualNormSquared / *static_cast<float*>(pAp.getCPUAddress());
+        *static_cast<float*>(residualNormSquared.getCPUAddress()) = 0.0f;
         RETURN_ON_ERROR_CODE(saxpy(rows, alpha, p, x));
         RETURN_ON_ERROR_CODE(saxpy(rows, -alpha, ap, r));
         RETURN_ON_ERROR_CODE(dotProductInternal(
             rows,
             r.getHandle(),
             r.getHandle(),
-            newResidualNormSquared.getGPUAddress()
+            residualNormSquared.getGPUAddress()
         ));
         RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
-        if(epsSuared > *static_cast<float*>(newResidualNormSquared.getCPUAddress())) {
+        if(epsSuared > *static_cast<float*>(residualNormSquared.getCPUAddress())) {
             return x.downloadBuffer(xOut);
         }
-        const float beta = *static_cast<float*>(newResidualNormSquared.getCPUAddress()) / *static_cast<float*>(residualNormSquared.getCPUAddress());
-        *static_cast<float*>(residualNormSquared.getCPUAddress()) = *static_cast<float*>(newResidualNormSquared.getCPUAddress());
+        const float beta = *static_cast<float*>(residualNormSquared.getCPUAddress()) / oldResidualNormSquared;
         RETURN_ON_ERROR_CODE(saxpby(rows, 1, beta, r, p, p));
     }
     return EC::ErrorCode("Max iterations reached!");
