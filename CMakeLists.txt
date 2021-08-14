@@ -19,23 +19,21 @@ find_package(TBB REQUIRED CONFIG)
 find_package(OpenCV REQUIRED CONFIG)
 find_package(CUDAToolkit REQUIRED)
 
-set(
-	WITH_ADDRESS_SANITIZER
+set(WITH_ADDRESS_SANITIZER
 	OFF CACHE BOOL
-	"If ON the project will be compiled with address sanitizer (it will run slow). For now it's clang only"
-)
+	"If ON the project will be compiled with address sanitizer (it will run slow). For now it's clang only")
 
-set(
-	WITH_CPU_PROFILER
+set(WITH_CPU_PROFILER
 	OFF CACHE BOOL
-	"If ON additional compiler flags will be set so that the executable could be profiled with perf"
-)
+	"If ON additional compiler flags will be set so that the executable could be profiled with perf")
 
-set(
-	WITH_PROFILING_SCOPED_TIMERS
+set(WITH_GPU_PROFILER
 	OFF CACHE BOOL
-	"If ON all scoped timers will be enabled and will print their result on the console"
-)
+	"If ON additional compiler flags will be set for the CUDA project so that profiler can be run")
+
+set(WITH_PROFILING_SCOPED_TIMERS
+	OFF CACHE BOOL
+	"If ON all scoped timers will be enabled and will print their result on the console")
 
 set(PTX_SOURCE_FOLDER "${PROJECT_BINARY_DIR}/ptx")
 
@@ -199,9 +197,13 @@ set_target_properties(gpu_sim
 target_compile_options(gpu_sim
 	PRIVATE
 		$<$<COMPILE_LANGUAGE:CUDA>:
-		#-fcuda-rdc
-		-ffp-contract=fast
-		>)
+		-ffp-contract=fast>)
+if(${WITH_GPU_PROFILER})
+	target_compile_options(gpu_sim
+		PRIVATE
+			$<$<COMPILE_LANGUAGE:CUDA>:
+			-g>)
+endif()
 
 add_dependencies(${PROJECT_NAME} gpu_sim)
 
