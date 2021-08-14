@@ -23,7 +23,7 @@
 
 // If this is defined all matrices will be uploaded to the GPU. Conjugate Gradient will use GPU implementation
 // of the vector matrix product.
-// #define GPU_CONJUGATE_GRADIENT
+#define GPU_CONJUGATE_GRADIENT
 
 #if defined(GPU_CONJUGATE_GRADIENT) || defined(GPU_ADVECTION)
     #define GPU_SETUP

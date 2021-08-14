@@ -112,16 +112,16 @@ extern "C" __global__ void dotProduct(
 ) {
     __shared__ float cache[512];
 
-    const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
+    const unsigned tid = blockIdx.x*blockDim.x + threadIdx.x;
     const int cacheIndex = threadIdx.x;
-    if(i < vectorLength) {
-        cache[cacheIndex] = a[i] * b[i];
+    if(tid < vectorLength) {
+        cache[cacheIndex] = a[tid] * b[tid];
     } else {
         cache[cacheIndex] = 0.0f;
     }
     __syncthreads();
 
-    for(int i = blockDim.x / 2; i > 0; i /= 2) {
+    for(int i = blockDim.x / 2; i > 0; i >>= 1) {
         if(cacheIndex < i) {
             cache[cacheIndex] += cache[cacheIndex + i];
         }
