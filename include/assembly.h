@@ -23,7 +23,7 @@
 
 // If this is defined all matrices will be uploaded to the GPU. Conjugate Gradient will use GPU implementation
 // of the vector matrix product.
-#define GPU_CONJUGATE_GRADIENT
+// #define GPU_CONJUGATE_GRADIENT
 
 #if defined(GPU_CONJUGATE_GRADIENT) || defined(GPU_ADVECTION)
     #define GPU_SETUP
@@ -297,7 +297,7 @@ public:
     NavierStokesAssembly();
     EC::ErrorCode init(const char* simDescriptionPath, const char* outPath);
     void solve();
-    void semiLagrangianSolve();
+    EC::ErrorCode semiLagrangianSolve();
     void setTimeStep(const real dt);
     void setOutputDir(std::string outputDir);
     void setOutputDir(std::string&& outputDir);
@@ -337,11 +337,35 @@ private:
     /// when the time changes. 
     SMM::CSRMatrix<real> velocityDivergenceMatrix;
 
+    /// Diffusion matrix used in the last step of the three way split, when solving for the velocity. This matrix is result solving
+    /// du/dt = viscosity * div(grad(u)) using the finite element method for the spatial discretizaion and implicit Euler method for
+    /// the temporal discretization. The matrix is formed by the sum of two matrices: M + viscosity * K, where M is the velocity mass
+    /// matrix and K is the velocity sitffness matrix. This matrix is constant for the given mesh and does not change when the time changes.
+    SMM::CSRMatrix<real> diffusionMatrix;
+
+    /// This is solved when solving for the diffusion. The diffusion is the last step of the operator split and it solves equation for
+    /// the velocity. When there is Dirichlet boundary condition for the velocity it's imposed at this step. It cannot be imposed after
+    /// solving the system, so it's imposed in the system itself. This is done by putting 1 on the main diagonal where the value is
+    /// imposed and then zeroing out all other elements in the same row and in the same column. The zeroing out is done in order to
+    /// preserve symmetry of the matrix. The elements which were zeroed out in the row do not matter since we need to impose a value
+    /// in the system, however the ones in the column do matter. This matrix holds all the columns which were zeroed out. They are
+    /// multiplied by the boundary condition and are then subtracted from the right hand side in order so that the system is not altered.
+    SMM::CSRMatrix<real> velocityDirichletWeights;
+
     /// Divergence matrices formed by (fi_i, dchi_j/dx) and (fi_i, dchi_j/dy) : forall i in numVelocityNodes - 1, j in 0...numPressureNodes - 1
     /// Where fi_i is the i-th velocity basis function and chi_j is the j-th pressure basis function
     /// These are used when pressure is found from the tentative velocity. These matrices are constant for the given mesh and do not change
     /// when the time changes. 
     SMM::CSRMatrix<real> pressureDivergenceMatrix;
+
+    /// When solving the pressure poisson equaiton we might need to impose Dirichlet boundary conditions. In that case we cannot
+    /// impose them after the system is solved. They have to be imposed in the system itself. This is done by putting 1 on the
+    /// main diagonal where the value is imposed and then zeroing out all other elements in the same row and in the same column.
+    /// The zeroing out is done in order to preserve symmetry of the matrix. The elements which were zeroed out in the row do not
+    /// matter since we need to impose a value in the system, however the ones in the column do matter. This matrix holds all the columns
+    /// which were zeroed out. They are multiplied by the boundary condition and are then subtracted from the right hand side in order
+    /// so that the system is not altered.
+    SMM::CSRMatrix<real> pressureDirichletWeights;
 
     /// Vector containing the approximate solution at each mesh node for the current time step
     /// First are the values in u direction for all nodes and the the values in v direction for all nodes
@@ -373,6 +397,10 @@ private:
     /// OpenCV matrix which will is used when exporting image results. It will be filled with
     /// the corresponding colors and then written to an image file on the hard disk inside the output folder.
     cv::Mat outputImage;
+
+    /// Assemble all matrices used by the FEM. This is called one time in the beggining of the semiLagrangianSolve
+    /// function to setup all of the matrices.
+    EC::ErrorCode assembleAllMatrices();
 
     template<int localRows, int localCols, typename TLocalF, typename Triplet>
     void assembleMatrix(const TLocalF& localFunction, Triplet& triplet);
@@ -1030,33 +1058,18 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
     }
 }
 
+
 template<typename VelocityShape, typename PressureShape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
-    
-    const int steps = totalTime / dt;
-    printf("Begin solution using semi Lagrangian method\n");
-    printf("Elements: %d\n", grid.getElementsCount());
-    printf("Velocity nodes: %d\n", grid.getNodesCount());
-    printf("Pressure nodes: %d\n", grid.getPressureNodesCount());
-    printf("Total time: %f\n", totalTime);
-    printf("dt: %f\n", dt);
-    printf("Total steps: %d\n", steps);
-    if(outFolder.empty()) {
-        printf("[Warning] No output folder. Results of the solver will not be written to disk\n");
-    } else {
-        printf("Output folder: %s\n", outFolder.c_str());
-    }
-#ifdef GPU_SETUP
+EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::assembleAllMatrices() {
+    // The number of async tasks which will be launced in the task group
+    const int numTasks = 5;
+    // List of error codes where each async task will write its output error code
+    // after all async tasks are done the list will be iterated and checked for errors
+    EC::ErrorCode status[numTasks];
+#ifdef GPU_CONJUGATE_GRADIENT
     auto& gpuDevice = getSelectedGPUDevice();
 #endif
-
-#ifdef GPU_ADVECTION
-    RETURN_ON_ERROR_CODE(gpuDevice.uploadKDTree(kdTreeCPUOwner));
-#endif
-
-    PROFILING_SCOPED_TIMER_FUN()
-
-    tbb::task_group g;
+    tbb::task_group matrixAssemblyGroup;
     
     // ======================================================================
     // ====================== ASSEMBLE VELOCITY MASS ========================
@@ -1064,7 +1077,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
     LocalMassFunctor<VelocityShape> localVelocityMass;
     SMM::CSRMatrix<real>::IC0Preconditioner velocityMassIC0(velocityMassMatrix);
-    g.run([&]() {
+    matrixAssemblyGroup.run([&]() {
         SMM::TripletMatrix<real> triplet;
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build velocity mass matrix");
@@ -1073,7 +1086,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
 
 #ifdef GPU_CONJUGATE_GRADIENT
             velocityMassMatrix.init(triplet);
-            gpuDevice.uploadMatrix(
+            status[0] = gpuDevice.uploadMatrix(
                 GPUSimulation::GPUSimulationDevice::velocityMass,
                 triplet
             );
@@ -1107,10 +1120,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         localMatrixOut += stiffness * dt * viscosity;
     };
 
-    SMM::CSRMatrix<real> diffusionMatrix;
     SMM::CSRMatrix<real>::IC0Preconditioner diffusionIC0(diffusionMatrix);
-    SMM::CSRMatrix<real> velocityDirichletWeights;
-    g.run([&]() {
+    matrixAssemblyGroup.run([&]() {
         SMM::TripletMatrix<real> triplet;
         std::unordered_set<int> allBoundaryNodes;
         SMM::TripletMatrix<real> dirichletWeightsTriplet;
@@ -1126,7 +1137,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 dirichletWeightsTriplet
             );
 #ifdef GPU_CONJUGATE_GRADIENT
-            gpuDevice.uploadMatrix(
+            status[1] = gpuDevice.uploadMatrix(
                 GPUSimulation::GPUSimulationDevice::diffusion,
                 triplet
             );
@@ -1149,9 +1160,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     // ==================== ASSEMBLE PRESSURE STIFFNESS =====================
     // ======================================================================
 
-    SMM::CSRMatrix<real> pressureDirichletWeights;
     SMM::CSRMatrix<real>::IC0Preconditioner pressureStiffnessIC0(pressureStiffnessMatrix);
-    g.run([&]() {
+    matrixAssemblyGroup.run([&]() {
         SMM::TripletMatrix<real> triplet;
         std::unordered_set<int> allBoundaryNodes;
         SMM::TripletMatrix<real> dirichletWeightsTriplet;
@@ -1168,7 +1178,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
                 dirichletWeightsTriplet
             );
 #ifdef GPU_CONJUGATE_GRADIENT
-            gpuDevice.uploadMatrix(
+            status[2] = gpuDevice.uploadMatrix(
                 GPUSimulation::GPUSimulationDevice::pressureSitffness,
                 triplet
             );
@@ -1192,7 +1202,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
     // ======================================================================
 
     const real dtInv = real(1) / dt;
-    g.run([&]() {
+    matrixAssemblyGroup.run([&]() {
         SMM::TripletMatrix<real> triplet;
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build velocity divergence matrix");
@@ -1204,7 +1214,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
         }
     });
 
-    g.run_and_wait([&]() {
+    matrixAssemblyGroup.run_and_wait([&]() {
         SMM::TripletMatrix<real> triplet;
         {
             PROFILING_SCOPED_TIMER_CUSTOM("Build pressure divergence matrix");
@@ -1215,8 +1225,40 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
             pressureDivergenceMatrix *= -dt;
         }
     });
+    for(int i = 0; i < numTasks; ++i) {
+        if(status[i].hasError()) {
+            return status[i];
+        }
+    }
+    return EC::ErrorCode();
+}
 
-    // ====================================================================
+template<typename VelocityShape, typename PressureShape>
+EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangianSolve() {
+    
+    const int steps = totalTime / dt;
+    printf("Begin solution using semi Lagrangian method\n");
+    printf("Elements: %d\n", grid.getElementsCount());
+    printf("Velocity nodes: %d\n", grid.getNodesCount());
+    printf("Pressure nodes: %d\n", grid.getPressureNodesCount());
+    printf("Total time: %f\n", totalTime);
+    printf("dt: %f\n", dt);
+    printf("Total steps: %d\n", steps);
+    if(outFolder.empty()) {
+        printf("[Warning] No output folder. Results of the solver will not be written to disk\n");
+    } else {
+        printf("Output folder: %s\n", outFolder.c_str());
+    }
+#ifdef GPU_SETUP
+    auto& gpuDevice = getSelectedGPUDevice();
+#endif
+
+#ifdef GPU_ADVECTION
+    RETURN_ON_ERROR_CODE(gpuDevice.uploadKDTree(kdTreeCPUOwner));
+#endif
+
+    PROFILING_SCOPED_TIMER_FUN()
+    RETURN_ON_ERROR_CODE(assembleAllMatrices());
 
     const int nodesCount = grid.getNodesCount();
     currentVelocitySolution.init(nodesCount * 2, 0.0f);

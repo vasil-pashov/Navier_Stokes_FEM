@@ -19,9 +19,6 @@ namespace EC {
 		int getStatus() const;
 		const char* getMessage() const;
 		bool hasError() const;
-		operator bool() const {
-			return hasError();
-		}
 	private:
 		void makeFormat(const char* format, va_list argptr);
 		int status;

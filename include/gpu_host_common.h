@@ -75,7 +75,7 @@ struct ScopedGPUContext {
         }
     }
 private:
-    CUcontext ctx;
+    [[maybe_unused]]CUcontext ctx;
     bool shouldPop;
 };
 
