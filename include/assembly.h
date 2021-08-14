@@ -467,7 +467,7 @@ private:
     /// require us to find a particle which at time point i was at some position (x1, y1), but has moved to (x, y) in
     /// time step i+1. Since each particle has a velocity and it "moves with the particle", the velocity of the particle
     /// which has moved to (x, y) at i+1 will be the velocity which we want to find.
-    void advect(
+    EC::ErrorCode advect(
         const real* const uVelocity,
         const real* const vVelocity,
         real* const uVelocityOut,
@@ -1577,7 +1577,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::assembleDivergenceMatri
 }
 
 template<typename VelocityShape, typename PressureShape>
-void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
+EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     const real* const uVelocity,
     const real* const vVelocity,
     real* const uVelocityOut,
@@ -1585,19 +1585,15 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
 ) {
     const int velocityNodesCount = grid.getNodesCount();
 #ifdef GPU_ADVECTION
-    const EC::ErrorCode status = gpuDevman.getDevice(0).advect(
+    auto& gpuDevice = getSelectedGPUDevice();
+    RETURN_ON_ERROR_CODE(gpuDevice.advect(
         velocityNodesCount,
         uVelocity,
         vVelocity,
         dt,
         uVelocityOut,
         vVelocityOut
-    );
-    if(status.hasError()) {
-        fprintf(stderr, "%s\n", status.getMessage());
-        assert(false);
-        exit(1);
-    }
+    ));
 #else
     
     const real* velocityNodes = grid.getNodesBuffer();
@@ -1642,6 +1638,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::advect(
         }
     });
 #endif
+    return EC::ErrorCode();
 }
 
 }
