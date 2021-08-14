@@ -1280,12 +1280,12 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
 // ==================================================================================
 // =============================== ADVECTION ========================================
 // ==================================================================================
-        advect(
+        RETURN_ON_ERROR_CODE(advect(
             currentVelocitySolution,
             currentVelocitySolution + nodesCount,
             tmp,
             tmp + nodesCount
-        );        
+        ));
 
 // ==================================================================================
 // ============================== PRESSURE SOLVE ====================================
@@ -1321,17 +1321,14 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
             }
         }
 #ifdef GPU_CONJUGATE_GRADIENT
-        {
-            const EC::ErrorCode status = gpuDevice.conjugateGradient(
-                GPUSimulation::GPUSimulationDevice::pressureSitffness,
-                static_cast<real*>(pressureRhs),
-                static_cast<real*>(currentPressureSolution),
-                static_cast<real*>(currentPressureSolution),
-                -1,
-                eps
-            );
-            assert(!status.hasError());
-        }
+        RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+            GPUSimulation::GPUSimulationDevice::pressureSitffness,
+            static_cast<real*>(pressureRhs),
+            static_cast<real*>(currentPressureSolution),
+            static_cast<real*>(currentPressureSolution),
+            -1,
+            eps
+        ));
 #else
         // Finally solve the linear system for the pressure
         solveStatus = SMM::ConjugateGradient(
@@ -1345,7 +1342,9 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
             ,pressureStiffnessIC0
             #endif
         );
-        assert(solveStatus == SMM::SolverStatus::SUCCESS);
+        if(solveStatus != SMM::SolverStatus::SUCCESS) {
+            return EC::ErrorCode(int(solveStatus), "Failed to solve: pressureStiffness * currentPressureSolution = pressureRhs");
+        }
 #endif
 
         // After the pressure is found, we must use it to find the "tentative" velocity.
@@ -1359,17 +1358,14 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
         // This function can find one final velocity component. It first finds the tentative velocity and then perfrms the diffusion.
         auto diffusionSolve = [&](real* currentVelocitySolution, real* velocityRhs, real* advectedVelocity, VelocityChannel ch) {
 #ifdef GPU_CONJUGATE_GRADIENT
-            {
-                const EC::ErrorCode status = gpuDevice.conjugateGradient(
-                    GPUSimulation::GPUSimulationDevice::velocityMass,
-                    static_cast<real*>(velocityRhs),
-                    static_cast<real*>(advectedVelocity),
-                    static_cast<real*>(currentVelocitySolution),
-                    -1,
-                    eps
-                );
-                assert(!status.hasError());
-            }
+            RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+                GPUSimulation::GPUSimulationDevice::velocityMass,
+                static_cast<real*>(velocityRhs),
+                static_cast<real*>(advectedVelocity),
+                static_cast<real*>(currentVelocitySolution),
+                -1,
+                eps
+            ));
 #else
             // Find the tentative velocity 
             SMM::SolverStatus status = SMM::ConjugateGradient(
@@ -1383,7 +1379,9 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
                 ,velocityMassIC0
                 #endif
             );
-            assert(status == SMM::SolverStatus::SUCCESS);
+            if(status != SMM::SolverStatus::SUCCESS) {
+                return EC::ErrorCode(int(status), "Failed to solve velocityMassMatrix * advectedVelocity = velocityRhs");
+            }
 #endif
             for(int i = 0; i < nodesCount; ++i) {
                 currentVelocitySolution[i] += advectedVelocity[i];
@@ -1417,14 +1415,14 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
             }
 #ifdef GPU_CONJUGATE_GRADIENT
             {
-                const EC::ErrorCode status = gpuDevice.conjugateGradient(
+                RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
                     GPUSimulation::GPUSimulationDevice::diffusion,
                     static_cast<real*>(velocityRhs),
                     static_cast<real*>(currentVelocitySolution),
                     static_cast<real*>(currentVelocitySolution),
                     -1,
                     eps
-                );
+                ))
                 assert(!status.hasError());
             }
 #else
@@ -1440,35 +1438,39 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
                 ,diffusionIC0
                 #endif
             );
-            assert(status == SMM::SolverStatus::SUCCESS);
+            if(status != SMM::SolverStatus::SUCCESS) {
+                return EC::ErrorCode(int(status), "Failed to solve diffusionMatrix * currentVelocitySolution = velocityRhs");
+            }
 #endif
+            return EC::ErrorCode();
         };
 
         // Multithreaded per channel computation is commented until tests are made to clear out
         // it it makes the program run faster when the sparse matrix vector product is multthreaded
         //g.run([&](){
-            diffusionSolve(
+            RETURN_ON_ERROR_CODE(diffusionSolve(
                 currentVelocitySolution,
                 velocityRhs,
                 tmp,
                 VelocityChannel::U
-            );
+            ));
         //});
         // Multithreaded per channel computation is commented until tests are made to clear out
         // it it makes the program run faster when the sparse matrix vector product is multthreaded
         //g.run_and_wait([&](){
-            diffusionSolve(
+            RETURN_ON_ERROR_CODE(diffusionSolve(
                 currentVelocitySolution + nodesCount,
                 velocityRhs + nodesCount,
                 tmp + nodesCount,
                 VelocityChannel::V
-            );
+            ));
         //});
 
         exportSolution(timeStep);
 
     }
 }
+    return EC::ErrorCode();
 }
 
 template<typename VelocityShape, typename PressureShape>
