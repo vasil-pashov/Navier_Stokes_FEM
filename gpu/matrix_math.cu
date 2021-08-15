@@ -16,16 +16,18 @@ __device__ void spRMult(
     const float* mult,
     float* res
 ) {
-    const unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
-    if(row >= rows) return;
-    const int currentRowStart = rowStart[row];
-    const int currentRowEnd = rowStart[row + 1];
-    float sum = 0.0f;
-    for(int i = currentRowStart; i < currentRowEnd; ++i) {
-        const int column = columnIndex[i];
-        sum += values[i] * mult[column];
+    unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
+    while(row < rows) {
+        const int currentRowStart = rowStart[row];
+        const int currentRowEnd = rowStart[row + 1];
+        float sum = 0.0f;
+        for(int i = currentRowStart; i < currentRowEnd; ++i) {
+            const int column = columnIndex[i];
+            sum += values[i] * mult[column];
+        }
+        res[row] = sum;
+        row += gridDim.x * blockDim.x;
     }
-    res[row] = sum;
 }
 
 extern "C" __global__ void spRMultKernel(
@@ -59,16 +61,18 @@ __device__ void spRMultSub(
     const float* mult,
     float* res
 ) {
-    const unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
-    if(row >= rows) return;
-    const int currentRowStart = rowStart[row];
-    const int currentRowEnd = rowStart[row + 1];
-    float sum = 0.0f;
-    for(int i = currentRowStart; i < currentRowEnd; ++i) {
-        const int column = columnIndex[i];
-        sum += values[i] * mult[column];
+    unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
+    while(row < rows) {
+        const int currentRowStart = rowStart[row];
+        const int currentRowEnd = rowStart[row + 1];
+        float sum = 0.0f;
+        for(int i = currentRowStart; i < currentRowEnd; ++i) {
+            const int column = columnIndex[i];
+            sum += values[i] * mult[column];
+        }
+        res[row] = lhs[row] - sum;
+        row += gridDim.x * blockDim.x;
     }
-    res[row] = lhs[row] - sum;
 }
 
 extern "C" __global__ void spRMultSubKernel(
@@ -94,9 +98,10 @@ __device__ void saxpy(
     const float* x,
     float* y
 ) {
-  const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
-  if (i < vectorLength) {
+  unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
+  while(i < vectorLength) {
       y[i] += a*x[i];
+      i += gridDim.x * blockDim.x;
   }
 }
 
@@ -124,9 +129,10 @@ __device__ void saxpby(
     const float* y,
     float* result
 ) {
-  const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
-  if (i < vectorLength) {
+  unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
+  while(i < vectorLength) {
       result[i] = a * x[i] + b * y[i];
+      i += gridDim.x * blockDim.x;
   }
 }
 extern "C" __global__ void saxpbyKernel(
@@ -153,13 +159,14 @@ __device__ void dotProduct(
 ) {
     __shared__ float cache[512];
 
-    const unsigned tid = blockIdx.x*blockDim.x + threadIdx.x;
+    unsigned tid = blockIdx.x*blockDim.x + threadIdx.x;
     const int cacheIndex = threadIdx.x;
-    if(tid < vectorLength) {
-        cache[cacheIndex] = a[tid] * b[tid];
-    } else {
-        cache[cacheIndex] = 0.0f;
+    float sum = 0.0f;
+    while(tid < vectorLength) {
+        sum += a[tid] * b[tid];
+        tid += gridDim.x * blockDim.x;
     }
+    cache[cacheIndex] = sum;
     __syncthreads();
 
     for(int i = blockDim.x / 2; i > 0; i >>= 1) {
