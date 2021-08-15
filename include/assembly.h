@@ -1276,6 +1276,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
 {
     PROFILING_SCOPED_TIMER_CUSTOM("Time iteration");
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
+        PROFILING_SCOPED_TIMER_CUSTOM("Step");
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
 // ==================================================================================
 // =============================== ADVECTION ========================================

@@ -67,6 +67,15 @@ namespace GPUSimulation {
             float eps
         );
 
+        EC::ErrorCode conjugateGradientMegaKernel(
+            const SimMatrix matrix,
+            const float* const b,
+            const float* const x0,
+            float* const x,
+            int maxIterations,
+            float eps
+        );
+
         /// Perform a * x + b * y where a and b are scalars and x and y are vectors.
         /// @param[in] vectorLength The number of elements in vectors x and y
         /// @param[in] a Scalar multiplier for the x vector
@@ -136,6 +145,7 @@ namespace GPUSimulation {
             saxpy,
             dotProduct,
             saxpby,
+            cgIteration,
             count
         };
 

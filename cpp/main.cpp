@@ -136,7 +136,11 @@ int main(int nargs, char** cargs) {
         fprintf(stderr, "[Error] %s\n", error.getMessage());
         return 1;
     }
-    assembler.semiLagrangianSolve();
+    error = assembler.semiLagrangianSolve();
+    if(error.hasError()) {
+        printf("[Error] %s\n", error.getMessage());
+        return 1;
+    }
     return 0;
 
 }

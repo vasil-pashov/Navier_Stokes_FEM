@@ -138,6 +138,7 @@ protected:
     void printDeviceInfo() const;
     CUdevice deviceHandle;
     CUcontext context;
+    int deviceSMCount;
 };
 
 /// Base GPU device manager class, which stores devices of a specific concrete type.

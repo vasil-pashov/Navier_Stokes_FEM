@@ -1,3 +1,4 @@
+#include "matrix_math_common.cuh"
 /// Multuply a matrix in CSR format with a dense vector. The vector is on the right hand side of the matrix.
 /// @param[in] rows The number of rows of the matrix
 /// @param[in] rowStart Array with length the number of rows + 1,
@@ -180,6 +181,8 @@ __device__ void dotProduct(
     }
 }
 
+
+
 extern "C" __global__ void dotProductKernel(
     const int vectorLength,
     const float* a,
@@ -187,4 +190,51 @@ extern "C" __global__ void dotProductKernel(
     float* result
 ) {
     dotProduct(vectorLength, a, b, result);
+}
+
+void __device__ syncGrid(unsigned int* barrier, unsigned int* generation) {
+    if(threadIdx.x == 0) {
+        volatile const unsigned int oldCount = atomicAdd(barrier, 1);
+        volatile const unsigned int myGeneration = *generation; 
+        if(oldCount == gridDim.x - 1) {
+            atomicAdd(generation, 1);
+            *barrier = 0;
+            __threadfence_system();
+        } else {
+            while(atomicCAS(barrier, 0, 0) != 0 && atomicCAS(generation, myGeneration, myGeneration) == myGeneration);
+        }
+    }
+    __syncthreads();
+}
+
+extern "C" __global__ void cgIterationKernel(
+    CGParams params
+) {
+    const int maxIterations = params.maxIterations;
+    const int tid = blockIdx.x*blockDim.x + threadIdx.x;
+    for(int i = 0; i < maxIterations; ++i) {
+        const int rows = params.rows;
+        spRMult(rows, params.rowStart, params.columnIndex, params.values, params.p, params.ap);
+        dotProduct(rows, params.p, params.ap, params.pAp);
+        syncGrid(params.barrier, params.generation);
+        const float oldResidualNormSquared = *params.residualNormSquared; 
+        const float alpha = oldResidualNormSquared / *params.pAp;
+        saxpy(rows, alpha, params.p, params.x);
+        saxpy(rows, -alpha, params.ap, params.r);
+        dotProduct(rows, params.r, params.r, params.newResidualNormSquared);
+        syncGrid(params.barrier, params.generation);
+        const float newResidualNormSquared = *params.newResidualNormSquared;
+        if(newResidualNormSquared < params.epsSq) {
+            return;
+        }
+        const float beta = newResidualNormSquared / oldResidualNormSquared;   
+        saxpby(rows, 1, beta, params.r, params.p, params.p);
+        syncGrid(params.barrier, params.generation);
+        if(tid == 0) {
+            *params.residualNormSquared = newResidualNormSquared;
+            *params.newResidualNormSquared = 0.0f;
+            *params.pAp = 0.0f;
+        }        
+    }
+
 }
