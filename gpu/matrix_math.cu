@@ -8,7 +8,7 @@
 /// the values of the elements in the row.
 /// @param[in] mult The vector which multiples the matrix (should not overlap with res)
 /// @param[out] res The result of the vector matrix product (should not overlap with mult)
-extern "C" __global__ void spRMult(
+__device__ void spRMult(
     const int rows,
     const int* rowStart,
     const int* columnIndex,
@@ -28,6 +28,16 @@ extern "C" __global__ void spRMult(
     res[row] = sum;
 }
 
+extern "C" __global__ void spRMultKernel(
+    const int rows,
+    const int* rowStart,
+    const int* columnIndex,
+    const float* values,
+    const float* mult,
+    float* res
+) {
+    spRMult(rows, rowStart, columnIndex, values, mult, res);
+}
 
 /// Multuply a matrix in CSR format with a dense vector and subtract this from a vector. Performing lhs - A * mult
 /// @param[in] rows The number of rows of the matrix
@@ -40,7 +50,7 @@ extern "C" __global__ void spRMult(
 /// @param[in] lhs The vector from which A * rhs will be subtracted (can overlap with res)
 /// @param[in] mult The vector which multiples the matrix (should not overlap with res)
 /// @param[out] res The result of the vector matrix product (should not overlap with rhs, can overlap with lhs)
-extern "C" __global__ void spRMultSub(
+__device__ void spRMultSub(
     const int rows,
     const int* rowStart,
     const int* columnIndex,
@@ -61,12 +71,24 @@ extern "C" __global__ void spRMultSub(
     res[row] = lhs[row] - sum;
 }
 
+extern "C" __global__ void spRMultSubKernel(
+    const int rows,
+    const int* rowStart,
+    const int* columnIndex,
+    const float* values,
+    const float* lhs,
+    const float* mult,
+    float* res
+) {
+    spRMultSub(rows, rowStart, columnIndex, values, lhs, mult, res);
+}
+
 /// Perform a * x + y where a is scalar, x and y are vectors. The result is stored in y
 /// @param[in] vectorLength The number of elemens in both x and y vectors
 /// @param[in] a The scalar which will multiply each element of x vector
 /// @param[in] x x vector from the equation y = a * x + y
 /// @param[inout] y y vector from the equation y = a * x + y. The result is stored in this vector
-extern "C" __global__ void saxpy(
+__device__ void saxpy(
     const int vectorLength,
     const float a,
     const float* x,
@@ -78,6 +100,15 @@ extern "C" __global__ void saxpy(
   }
 }
 
+extern "C" __global__ void saxpyKernel(
+    const int vectorLength,
+    const float a,
+    const float* x,
+    float* y
+) {
+    saxpy(vectorLength, a, x, y);
+}
+
 /// Perform a * x + b * y where a and b are scalars and x and y are vectors.
 /// @param[in] vectorLength The number of elements in vectors x and y
 /// @param[in] a Scalar multiplier for the x vector
@@ -85,7 +116,7 @@ extern "C" __global__ void saxpy(
 /// @param[in] x Vector multiplied by a
 /// @param[in] y Vector multiplied by b
 /// @param[out] result Vector where the result is stored
-extern "C" __global__ void saxpby(
+__device__ void saxpby(
     const int vectorLength,
     const float a,
     const float b,
@@ -98,13 +129,23 @@ extern "C" __global__ void saxpby(
       result[i] = a * x[i] + b * y[i];
   }
 }
+extern "C" __global__ void saxpbyKernel(
+    const int vectorLength,
+    const float a,
+    const float b,
+    const float* x,
+    const float* y,
+    float* result
+) {
+    saxpby(vectorLength, a, b, x, y, result);
+}
 
 /// Perform dot product between a and b vectors and store in result
 /// @param[in] vectorLength The length of both a and b vectors
 /// @param[in] a The first vector to dot
 /// @param[in] b The second vector to dot
 /// @param[out] result The result from dot(a, b)
-extern "C" __global__ void dotProduct(
+__device__ void dotProduct(
     const int vectorLength,
     const float* a,
     const float* b,
@@ -130,4 +171,13 @@ extern "C" __global__ void dotProduct(
     if(cacheIndex == 0) {
         atomicAdd(result, cache[0]);
     }
+}
+
+extern "C" __global__ void dotProductKernel(
+    const int vectorLength,
+    const float* a,
+    const float* b,
+    float* result
+) {
+    dotProduct(vectorLength, a, b, result);
 }

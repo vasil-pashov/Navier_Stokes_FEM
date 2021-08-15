@@ -348,7 +348,7 @@ CPUPinnedBuffer::CPUPinnedBuffer(CPUPinnedBuffer&& other) :
 
 CPUPinnedBuffer& CPUPinnedBuffer::operator=(CPUPinnedBuffer&& other) {
     [[maybe_unused]]const EC::ErrorCode& status = CHECK_CUDA_ERROR(cuMemFreeHost(data));
-    assert(status == CUDA_SUCCESS);
+    assert(!status.hasError());
     data = other.data;
     byteSize = other.byteSize;
     other.data = nullptr;

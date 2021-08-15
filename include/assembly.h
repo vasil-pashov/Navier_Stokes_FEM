@@ -1422,8 +1422,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
                     static_cast<real*>(currentVelocitySolution),
                     -1,
                     eps
-                ))
-                assert(!status.hasError());
+                ));
             }
 #else
             // Find the final velocity at the current time step

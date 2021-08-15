@@ -35,11 +35,11 @@ EC::ErrorCode GPUSimulationDevice::loadSparseMatrixModule(const char* data) {
     const int kernelCount = int(SparseMatrixKernels::count);
     // Warrning order must match with the one in SparseMatrixKernels enum
     std::array<const char*, kernelCount> kernelsToExtract = {
-        "spRMult",
-        "spRMultSub",
-        "saxpy",
-        "dotProduct",
-        "saxpby"
+        "spRMultKernel",
+        "spRMultSubKernel",
+        "saxpyKernel",
+        "dotProductKernel",
+        "saxpbyKernel"
     };
 
     std::array<CUfunction*, kernelCount> kernelPointers;
