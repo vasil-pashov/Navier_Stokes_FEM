@@ -267,10 +267,14 @@ EC::ErrorCode GPUSimulationDevice::dotProductInternal(
         (void*)&b,
         (void*)&result
     };
+    const int dynamicSharedMemSize = blockSize.x * sizeof(float);
     GPU::KernelLaunchParams params(
         gridSize,
         blockSize,
-        kernelParams
+        dynamicSharedMemSize,
+        0,
+        kernelParams,
+        nullptr
     );
     return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::dotProduct)], params);
 }
@@ -457,10 +461,15 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
     void* kernelParams[] = {
         (void*)&cgparams
     };
+    // Used by the dot product function
+    const int dynamicSharedMemSize = blockSize.x * sizeof(float);
     GPU::KernelLaunchParams params(
         gridSize,
         blockSize,
-        kernelParams
+        dynamicSharedMemSize,
+        0,
+        kernelParams,
+        nullptr
     );
     RETURN_ON_ERROR_CODE(callKernel(sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)], params));
     float newResidual;

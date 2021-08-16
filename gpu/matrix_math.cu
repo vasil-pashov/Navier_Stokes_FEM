@@ -158,7 +158,7 @@ __device__ void dotProduct(
     const float* b,
     float* result
 ) {
-    __shared__ float cache[512];
+    extern __shared__ float cache[];
 
     unsigned tid = blockIdx.x*blockDim.x + threadIdx.x;
     const int cacheIndex = threadIdx.x;
