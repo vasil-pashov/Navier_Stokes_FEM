@@ -199,14 +199,12 @@ extern "C" __global__ void dotProductKernel(
 
 void __device__ syncGrid(unsigned int* barrier, unsigned int* generation) {
     if(threadIdx.x == 0) {
-        volatile const unsigned int oldCount = atomicAdd(barrier, 1);
         volatile const unsigned int myGeneration = *generation;
+        const unsigned int oldCount = atomicInc(barrier, gridDim.x - 1);
         if(oldCount == gridDim.x - 1) {
             atomicAdd(generation, 1);
-            *barrier = 0;
-        } else {
-            while(atomicCAS(barrier, 0, 0) != 0 && atomicCAS(generation, myGeneration, myGeneration) == myGeneration);
         }
+        while(atomicCAS(generation, myGeneration, myGeneration) == myGeneration);
     }
     __syncthreads();
 }

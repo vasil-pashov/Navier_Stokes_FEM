@@ -413,7 +413,7 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
     RETURN_ON_ERROR_CODE(r.init(byteSize));
 
     RETURN_ON_ERROR_CODE(residualNormSquared.init(sizeof(float)));
-     RETURN_ON_CUDA_ERROR(cuMemsetD32Async(residualNormSquared.getHandle(), 0, 1, 0));
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(residualNormSquared.getHandle(), 0, 1, 0));
 
     RETURN_ON_ERROR_CODE(pAp.init(sizeof(float)));
     RETURN_ON_CUDA_ERROR(cuMemsetD32Async(pAp.getHandle(), 0, 1, 0));
@@ -445,11 +445,13 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
     }
 
     Dim3 blockSize(128);
+    const int dynamicSharedMemSize = blockSize.x * sizeof(float);
     int numBlocksPerSm = 0;
     cuOccupancyMaxActiveBlocksPerMultiprocessor(
         &numBlocksPerSm,
         sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)],
-        128, 128 * 4
+        blockSize.x,
+        dynamicSharedMemSize
     );
     Dim3 gridSize(std::min(deviceSMCount * numBlocksPerSm, (rows + blockSize.x) / blockSize.x));
     CGParams cgparams;
@@ -473,7 +475,6 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
         (void*)&cgparams
     };
     // Used by the dot product function
-    const int dynamicSharedMemSize = blockSize.x * sizeof(float);
     GPU::KernelLaunchParams params(
         gridSize,
         blockSize,
