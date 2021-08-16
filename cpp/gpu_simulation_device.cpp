@@ -16,6 +16,7 @@ EC::ErrorCode GPUSimulationDevice::init(int index) {
 #else
     cudaCooperativeGroupsSupported = 0;
 #endif
+    return EC::ErrorCode();
 }
 
 EC::ErrorCode GPUSimulationDevice::loadModules(const char* advectionData, const char* sparseMatrixData) {
