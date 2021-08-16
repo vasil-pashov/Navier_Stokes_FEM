@@ -362,8 +362,6 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradient(
             return x.downloadBuffer(xOut);
         }
         const float beta = *static_cast<float*>(residualNormSquared.getCPUAddress()) / oldResidualNormSquared;
-        // printf("Multikernel iteration: %d alpha: %.8f, %.8f, oldRes: %.8f, newRes: %.8f\n",
-        //     i, alpha, beta, oldResidualNormSquared, *static_cast<float*>(residualNormSquared.getCPUAddress()));
         RETURN_ON_ERROR_CODE(saxpby(rows, 1, beta, r, p, p));
     }
     return EC::ErrorCode("Max iterations reached!");
@@ -392,9 +390,7 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
     const float epsSuared = eps * eps;
     const int rows = a.getDenseRowCount();
     const int64_t byteSize = rows * sizeof(float);
-    GPU::GPUBuffer x, ap, p, r;
-    // TODO: Merge these two into a structure with two elements
-    GPU::MappedBuffer residualNormSquared, newResidualNormSquared, pAp, barrier, generation;
+    GPU::GPUBuffer x, ap, p, r,pAp, barrier, generation, newResidualNormSquared, residualNormSquared;
 
     RETURN_ON_ERROR_CODE(ap.init(byteSize));
     RETURN_ON_ERROR_CODE(p.init(byteSize));
@@ -402,19 +398,19 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
     RETURN_ON_ERROR_CODE(r.init(byteSize));
 
     RETURN_ON_ERROR_CODE(residualNormSquared.init(sizeof(float)));
-    *static_cast<float*>(residualNormSquared.getCPUAddress()) = 0;
+     RETURN_ON_CUDA_ERROR(cuMemsetD32Async(residualNormSquared.getHandle(), 0, 1, 0));
 
     RETURN_ON_ERROR_CODE(pAp.init(sizeof(float)));
-    *static_cast<float*>(pAp.getCPUAddress()) = 0;
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(pAp.getHandle(), 0, 1, 0));
 
     RETURN_ON_ERROR_CODE(barrier.init(sizeof(unsigned int)));
-    *static_cast<unsigned int*>(barrier.getCPUAddress()) = 0;
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(barrier.getHandle(), 0, 1, 0));
 
     RETURN_ON_ERROR_CODE(generation.init(sizeof(unsigned int)));
-    *static_cast<unsigned int*>(generation.getCPUAddress()) = 0;
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(generation.getHandle(), 0, 1, 0));
 
     RETURN_ON_ERROR_CODE(newResidualNormSquared.init(sizeof(float)));
-    *static_cast<float*>(newResidualNormSquared.getCPUAddress()) = 0;
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(newResidualNormSquared.getHandle(), 0, 1, 0));
 
     RETURN_ON_ERROR_CODE(x.uploadBuffer(x0, byteSize));
     RETURN_ON_ERROR_CODE(p.uploadBuffer(b, byteSize));
@@ -425,13 +421,10 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
         rows,
         r.getHandle(),
         r.getHandle(),
-        residualNormSquared.getGPUAddress()
+        residualNormSquared.getHandle()
     ));
     RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
 
-    if(epsSuared > *static_cast<float*>(residualNormSquared.getCPUAddress())) {
-        return EC::ErrorCode();
-    }
     if(maxIterations == -1) {
         maxIterations = rows;
     }
@@ -444,7 +437,6 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
         128, 128 * 4
     );
     Dim3 gridSize(std::min(deviceSMCount * numBlocksPerSm, (rows + blockSize.x) / blockSize.x));
-    
     CGParams cgparams;
     cgparams.rowStart = (int*)a.getRowStartHandle();
     cgparams.columnIndex = (int*)a.getColumnIndexHandle();
@@ -453,11 +445,11 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
     cgparams.p = (float*)p.getHandle();
     cgparams.ap = (float*)ap.getHandle();
     cgparams.r = (float*)r.getHandle();
-    cgparams.residualNormSquared = (float*)residualNormSquared.getGPUAddress();
-    cgparams.newResidualNormSquared = (float*)newResidualNormSquared.getGPUAddress();
-    cgparams.pAp = (float*)pAp.getGPUAddress();
-    cgparams.barrier = (unsigned int*)barrier.getGPUAddress();
-    cgparams.generation = (unsigned int*)generation.getGPUAddress();
+    cgparams.residualNormSquared = (float*)residualNormSquared.getHandle();
+    cgparams.newResidualNormSquared = (float*)newResidualNormSquared.getHandle();
+    cgparams.pAp = (float*)pAp.getHandle();
+    cgparams.barrier = (unsigned int*)barrier.getHandle();
+    cgparams.generation = (unsigned int*)generation.getHandle();
     cgparams.rows = a.getDenseRowCount();
     cgparams.maxIterations = maxIterations;
     cgparams.epsSq = epsSuared;
@@ -471,8 +463,8 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
         kernelParams
     );
     RETURN_ON_ERROR_CODE(callKernel(sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)], params));
-    RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
-    const float newResidual = *(float*)newResidualNormSquared.getCPUAddress();
+    float newResidual;
+    newResidualNormSquared.downloadBuffer(&newResidual);
     if(newResidual < epsSuared) {
         return x.downloadBuffer(xOut);
     }

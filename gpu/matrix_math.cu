@@ -195,11 +195,10 @@ extern "C" __global__ void dotProductKernel(
 void __device__ syncGrid(unsigned int* barrier, unsigned int* generation) {
     if(threadIdx.x == 0) {
         volatile const unsigned int oldCount = atomicAdd(barrier, 1);
-        volatile const unsigned int myGeneration = *generation; 
+        volatile const unsigned int myGeneration = *generation;
         if(oldCount == gridDim.x - 1) {
             atomicAdd(generation, 1);
             *barrier = 0;
-            __threadfence_system();
         } else {
             while(atomicCAS(barrier, 0, 0) != 0 && atomicCAS(generation, myGeneration, myGeneration) == myGeneration);
         }
@@ -217,7 +216,7 @@ extern "C" __global__ void conjugateGradientMegakernel(
         spRMult(rows, params.rowStart, params.columnIndex, params.values, params.p, params.ap);
         dotProduct(rows, params.ap, params.p, params.pAp);
         syncGrid(params.barrier, params.generation);
-        const float oldResidualNormSquared = *params.residualNormSquared; 
+        const float oldResidualNormSquared = *params.residualNormSquared;
         const float alpha = oldResidualNormSquared / *params.pAp;
         saxpy(rows, alpha, params.p, params.x);
         saxpy(rows, -alpha, params.ap, params.r);
@@ -234,8 +233,7 @@ extern "C" __global__ void conjugateGradientMegakernel(
             *params.residualNormSquared = newResidualNormSquared;
             *params.newResidualNormSquared = 0.0f;
             *params.pAp = 0.0f;
-            __threadfence_system();
-        }   
+        }
+        syncGrid(params.barrier, params.generation);
     }
-
 }
