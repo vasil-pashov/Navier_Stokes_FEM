@@ -41,7 +41,7 @@ EC::ErrorCode GPUSimulationDevice::loadSparseMatrixModule(const char* data) {
         "saxpyKernel",
         "dotProductKernel",
         "saxpbyKernel",
-        "cgIterationKernel"
+        "conjugateGradientMegakernel"
     };
 
     std::array<CUfunction*, kernelCount> kernelPointers;
@@ -362,6 +362,8 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradient(
             return x.downloadBuffer(xOut);
         }
         const float beta = *static_cast<float*>(residualNormSquared.getCPUAddress()) / oldResidualNormSquared;
+        // printf("Multikernel iteration: %d alpha: %.8f, %.8f, oldRes: %.8f, newRes: %.8f\n",
+        //     i, alpha, beta, oldResidualNormSquared, *static_cast<float*>(residualNormSquared.getCPUAddress()));
         RETURN_ON_ERROR_CODE(saxpby(rows, 1, beta, r, p, p));
     }
     return EC::ErrorCode("Max iterations reached!");
@@ -438,7 +440,7 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
     int numBlocksPerSm = 0;
     cuOccupancyMaxActiveBlocksPerMultiprocessor(
         &numBlocksPerSm,
-        sparseMatrixKernels[int(SparseMatrixKernels::cgIteration)],
+        sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)],
         128, 128 * 4
     );
     Dim3 gridSize(std::min(deviceSMCount * numBlocksPerSm, (rows + blockSize.x) / blockSize.x));
@@ -468,7 +470,7 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
         blockSize,
         kernelParams
     );
-    RETURN_ON_ERROR_CODE(callKernel(sparseMatrixKernels[int(SparseMatrixKernels::cgIteration)], params));
+    RETURN_ON_ERROR_CODE(callKernel(sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)], params));
     RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
     const float newResidual = *(float*)newResidualNormSquared.getCPUAddress();
     if(newResidual < epsSuared) {

@@ -207,15 +207,15 @@ void __device__ syncGrid(unsigned int* barrier, unsigned int* generation) {
     __syncthreads();
 }
 
-extern "C" __global__ void cgIterationKernel(
+extern "C" __global__ void conjugateGradientMegakernel(
     CGParams params
 ) {
     const int maxIterations = params.maxIterations;
     const int tid = blockIdx.x*blockDim.x + threadIdx.x;
+    const int rows = params.rows;
     for(int i = 0; i < maxIterations; ++i) {
-        const int rows = params.rows;
         spRMult(rows, params.rowStart, params.columnIndex, params.values, params.p, params.ap);
-        dotProduct(rows, params.p, params.ap, params.pAp);
+        dotProduct(rows, params.ap, params.p, params.pAp);
         syncGrid(params.barrier, params.generation);
         const float oldResidualNormSquared = *params.residualNormSquared; 
         const float alpha = oldResidualNormSquared / *params.pAp;
@@ -227,14 +227,15 @@ extern "C" __global__ void cgIterationKernel(
         if(newResidualNormSquared < params.epsSq) {
             return;
         }
-        const float beta = newResidualNormSquared / oldResidualNormSquared;   
+        const float beta = newResidualNormSquared / oldResidualNormSquared;
         saxpby(rows, 1, beta, params.r, params.p, params.p);
         syncGrid(params.barrier, params.generation);
         if(tid == 0) {
             *params.residualNormSquared = newResidualNormSquared;
             *params.newResidualNormSquared = 0.0f;
             *params.pAp = 0.0f;
-        }        
+            __threadfence_system();
+        }   
     }
 
 }

@@ -145,7 +145,7 @@ namespace GPUSimulation {
             saxpy,
             dotProduct,
             saxpby,
-            cgIteration,
+            conjugateGradientMegakernel,
             count
         };
 
