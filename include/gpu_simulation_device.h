@@ -21,6 +21,7 @@ namespace GPUSimulation {
             pressureDivergence,
             count
         };
+        EC::ErrorCode init(int index);
         EC::ErrorCode loadModules(const char* advectionData, const char* sparseMatrixData);
         EC::ErrorCode uploadKDTree(const NSFem::KDTreeCPUOwner& cpuOwner);
         EC::ErrorCode initVelocityBuffers(const int numElements);
@@ -160,6 +161,8 @@ namespace GPUSimulation {
 
         GPU::GPUBuffer uVelocityOutBuffer;
         GPU::GPUBuffer vVelocityOutBuffer;
+
+        int cudaCooperativeGroupsSupported;
     };
 
     class GPUSimulationDeviceManager : public GPU::GPUDeviceManagerBase<GPUSimulationDevice> {

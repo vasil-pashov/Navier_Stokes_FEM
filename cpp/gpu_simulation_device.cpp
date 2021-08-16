@@ -8,6 +8,16 @@ namespace GPUSimulation {
 
 #define GET_PTX_FILE_PATH(ptxFileName) PTX_SOURCE_FOLDER ptxFileName
 
+EC::ErrorCode GPUSimulationDevice::init(int index) {
+    using namespace GPU;
+    RETURN_ON_ERROR_CODE(GPUDeviceBase::init(index));
+#if CUDA_VERSION >= 9000
+    RETURN_ON_CUDA_ERROR(cuDeviceGetAttribute(&cudaCooperativeGroupsSupported, CU_DEVICE_ATTRIBUTE_COOPERATIVE_LAUNCH, deviceHandle));
+#else
+    cudaCooperativeGroupsSupported = 0;
+#endif
+}
+
 EC::ErrorCode GPUSimulationDevice::loadModules(const char* advectionData, const char* sparseMatrixData) {
     RETURN_ON_ERROR_CODE(loadAdvectionModule(advectionData));
     return loadSparseMatrixModule(sparseMatrixData);
@@ -471,7 +481,23 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
         kernelParams,
         nullptr
     );
+#if CUDA_VERSION >= 9000
+    if (cudaCooperativeGroupsSupported) {
+        RETURN_ON_CUDA_ERROR(
+            cuLaunchCooperativeKernel(
+                sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)],
+                gridSize.x, gridSize.y, gridSize.z,
+                blockSize.x, blockSize.y, blockSize.z,
+                dynamicSharedMemSize,
+                0,
+                kernelParams
+            ))
+    } else {
+        RETURN_ON_ERROR_CODE(callKernel(sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)], params));
+    }
+#else
     RETURN_ON_ERROR_CODE(callKernel(sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)], params));
+#endif
     float newResidual;
     newResidualNormSquared.downloadBuffer(&newResidual);
     if(newResidual < epsSuared) {

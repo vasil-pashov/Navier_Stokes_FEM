@@ -1,4 +1,9 @@
 #include "matrix_math_common.cuh"
+#define HAS_COOP_GROUPS (__CUDA_ARCH__ >= 600)
+#if HAS_COOP_GROUPS
+    #include <cooperative_groups.h>
+#endif
+
 /// Multuply a matrix in CSR format with a dense vector. The vector is on the right hand side of the matrix.
 /// @param[in] rows The number of rows of the matrix
 /// @param[in] rowStart Array with length the number of rows + 1,
@@ -212,28 +217,48 @@ extern "C" __global__ void conjugateGradientMegakernel(
     const int maxIterations = params.maxIterations;
     const int tid = blockIdx.x*blockDim.x + threadIdx.x;
     const int rows = params.rows;
+#if HAS_COOP_GROUPS
+    using namespace cooperative_groups;
+    grid_group grid = this_grid();
+#endif
     for(int i = 0; i < maxIterations; ++i) {
         spRMult(rows, params.rowStart, params.columnIndex, params.values, params.p, params.ap);
         dotProduct(rows, params.ap, params.p, params.pAp);
+#if HAS_COOP_GROUPS
+        grid.sync();
+#else
         syncGrid(params.barrier, params.generation);
+#endif
         const float oldResidualNormSquared = *params.residualNormSquared;
         const float alpha = oldResidualNormSquared / *params.pAp;
         saxpy(rows, alpha, params.p, params.x);
         saxpy(rows, -alpha, params.ap, params.r);
         dotProduct(rows, params.r, params.r, params.newResidualNormSquared);
+#if HAS_COOP_GROUPS
+        grid.sync();
+#else
         syncGrid(params.barrier, params.generation);
+#endif
         const float newResidualNormSquared = *params.newResidualNormSquared;
         if(newResidualNormSquared < params.epsSq) {
             return;
         }
         const float beta = newResidualNormSquared / oldResidualNormSquared;
         saxpby(rows, 1, beta, params.r, params.p, params.p);
+#if HAS_COOP_GROUPS
+        grid.sync();
+#else
         syncGrid(params.barrier, params.generation);
+#endif
         if(tid == 0) {
             *params.residualNormSquared = newResidualNormSquared;
             *params.newResidualNormSquared = 0.0f;
             *params.pAp = 0.0f;
         }
+#if HAS_COOP_GROUPS
+        grid.sync();
+#else
         syncGrid(params.barrier, params.generation);
+#endif
     }
 }
