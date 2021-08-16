@@ -1,3 +1,9 @@
+#include "matrix_math_common.cuh"
+#define HAS_COOP_GROUPS (__CUDA_ARCH__ >= 600)
+#if HAS_COOP_GROUPS
+    #include <cooperative_groups.h>
+#endif
+
 /// Multuply a matrix in CSR format with a dense vector. The vector is on the right hand side of the matrix.
 /// @param[in] rows The number of rows of the matrix
 /// @param[in] rowStart Array with length the number of rows + 1,
@@ -16,16 +22,18 @@ __device__ void spRMult(
     const float* mult,
     float* res
 ) {
-    const unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
-    if(row >= rows) return;
-    const int currentRowStart = rowStart[row];
-    const int currentRowEnd = rowStart[row + 1];
-    float sum = 0.0f;
-    for(int i = currentRowStart; i < currentRowEnd; ++i) {
-        const int column = columnIndex[i];
-        sum += values[i] * mult[column];
+    unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
+    while(row < rows) {
+        const int currentRowStart = rowStart[row];
+        const int currentRowEnd = rowStart[row + 1];
+        float sum = 0.0f;
+        for(int i = currentRowStart; i < currentRowEnd; ++i) {
+            const int column = columnIndex[i];
+            sum += values[i] * mult[column];
+        }
+        res[row] = sum;
+        row += gridDim.x * blockDim.x;
     }
-    res[row] = sum;
 }
 
 extern "C" __global__ void spRMultKernel(
@@ -59,16 +67,18 @@ __device__ void spRMultSub(
     const float* mult,
     float* res
 ) {
-    const unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
-    if(row >= rows) return;
-    const int currentRowStart = rowStart[row];
-    const int currentRowEnd = rowStart[row + 1];
-    float sum = 0.0f;
-    for(int i = currentRowStart; i < currentRowEnd; ++i) {
-        const int column = columnIndex[i];
-        sum += values[i] * mult[column];
+    unsigned row = blockIdx.x * blockDim.x + threadIdx.x;
+    while(row < rows) {
+        const int currentRowStart = rowStart[row];
+        const int currentRowEnd = rowStart[row + 1];
+        float sum = 0.0f;
+        for(int i = currentRowStart; i < currentRowEnd; ++i) {
+            const int column = columnIndex[i];
+            sum += values[i] * mult[column];
+        }
+        res[row] = lhs[row] - sum;
+        row += gridDim.x * blockDim.x;
     }
-    res[row] = lhs[row] - sum;
 }
 
 extern "C" __global__ void spRMultSubKernel(
@@ -94,9 +104,10 @@ __device__ void saxpy(
     const float* x,
     float* y
 ) {
-  const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
-  if (i < vectorLength) {
+  unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
+  while(i < vectorLength) {
       y[i] += a*x[i];
+      i += gridDim.x * blockDim.x;
   }
 }
 
@@ -124,9 +135,10 @@ __device__ void saxpby(
     const float* y,
     float* result
 ) {
-  const unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
-  if (i < vectorLength) {
+  unsigned i = blockIdx.x*blockDim.x + threadIdx.x;
+  while(i < vectorLength) {
       result[i] = a * x[i] + b * y[i];
+      i += gridDim.x * blockDim.x;
   }
 }
 extern "C" __global__ void saxpbyKernel(
@@ -151,15 +163,16 @@ __device__ void dotProduct(
     const float* b,
     float* result
 ) {
-    __shared__ float cache[512];
+    extern __shared__ float cache[];
 
-    const unsigned tid = blockIdx.x*blockDim.x + threadIdx.x;
+    unsigned tid = blockIdx.x*blockDim.x + threadIdx.x;
     const int cacheIndex = threadIdx.x;
-    if(tid < vectorLength) {
-        cache[cacheIndex] = a[tid] * b[tid];
-    } else {
-        cache[cacheIndex] = 0.0f;
+    float sum = 0.0f;
+    while(tid < vectorLength) {
+        sum += a[tid] * b[tid];
+        tid += gridDim.x * blockDim.x;
     }
+    cache[cacheIndex] = sum;
     __syncthreads();
 
     for(int i = blockDim.x / 2; i > 0; i >>= 1) {
@@ -173,6 +186,8 @@ __device__ void dotProduct(
     }
 }
 
+
+
 extern "C" __global__ void dotProductKernel(
     const int vectorLength,
     const float* a,
@@ -180,4 +195,68 @@ extern "C" __global__ void dotProductKernel(
     float* result
 ) {
     dotProduct(vectorLength, a, b, result);
+}
+
+void __device__ syncGrid(unsigned int* barrier, unsigned int* generation) {
+    if(threadIdx.x == 0) {
+        volatile const unsigned int myGeneration = *generation;
+        const unsigned int oldCount = atomicInc(barrier, gridDim.x - 1);
+        if(oldCount == gridDim.x - 1) {
+            atomicAdd(generation, 1);
+        }
+        while(atomicCAS(generation, myGeneration, myGeneration) == myGeneration);
+    }
+    __syncthreads();
+}
+
+extern "C" __global__ void conjugateGradientMegakernel(
+    CGParams params
+) {
+    const int maxIterations = params.maxIterations;
+    const int tid = blockIdx.x*blockDim.x + threadIdx.x;
+    const int rows = params.rows;
+#if HAS_COOP_GROUPS
+    using namespace cooperative_groups;
+    grid_group grid = this_grid();
+#endif
+    for(int i = 0; i < maxIterations; ++i) {
+        spRMult(rows, params.rowStart, params.columnIndex, params.values, params.p, params.ap);
+        dotProduct(rows, params.ap, params.p, params.pAp);
+#if HAS_COOP_GROUPS
+        grid.sync();
+#else
+        syncGrid(params.barrier, params.generation);
+#endif
+        const float oldResidualNormSquared = *params.residualNormSquared;
+        const float alpha = oldResidualNormSquared / *params.pAp;
+        saxpy(rows, alpha, params.p, params.x);
+        saxpy(rows, -alpha, params.ap, params.r);
+        dotProduct(rows, params.r, params.r, params.newResidualNormSquared);
+#if HAS_COOP_GROUPS
+        grid.sync();
+#else
+        syncGrid(params.barrier, params.generation);
+#endif
+        const float newResidualNormSquared = *params.newResidualNormSquared;
+        if(newResidualNormSquared < params.epsSq) {
+            return;
+        }
+        const float beta = newResidualNormSquared / oldResidualNormSquared;
+        saxpby(rows, 1, beta, params.r, params.p, params.p);
+#if HAS_COOP_GROUPS
+        grid.sync();
+#else
+        syncGrid(params.barrier, params.generation);
+#endif
+        if(tid == 0) {
+            *params.residualNormSquared = newResidualNormSquared;
+            *params.newResidualNormSquared = 0.0f;
+            *params.pAp = 0.0f;
+        }
+#if HAS_COOP_GROUPS
+        grid.sync();
+#else
+        syncGrid(params.barrier, params.generation);
+#endif
+    }
 }

@@ -81,6 +81,7 @@ set(HEADERS
 	gpu_cpu_shared/kd_tree.cuh
 	gpu_cpu_shared/gpu_grid.cuh
 	gpu_cpu_shared/small_vector.cuh
+	gpu_cpu_shared/matrix_math_common.cuh
 )
 
 add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})

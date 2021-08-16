@@ -1,4 +1,5 @@
 #include "gpu_simulation_device.h"
+#include "matrix_math_common.cuh"
 #include "error_code.h"
 #include <array>
 #include <memory>
@@ -6,6 +7,17 @@
 namespace GPUSimulation {
 
 #define GET_PTX_FILE_PATH(ptxFileName) PTX_SOURCE_FOLDER ptxFileName
+
+EC::ErrorCode GPUSimulationDevice::init(int index) {
+    using namespace GPU;
+    RETURN_ON_ERROR_CODE(GPUDeviceBase::init(index));
+#if CUDA_VERSION >= 9000
+    RETURN_ON_CUDA_ERROR(cuDeviceGetAttribute(&cudaCooperativeGroupsSupported, CU_DEVICE_ATTRIBUTE_COOPERATIVE_LAUNCH, deviceHandle));
+#else
+    cudaCooperativeGroupsSupported = 0;
+#endif
+    return EC::ErrorCode();
+}
 
 EC::ErrorCode GPUSimulationDevice::loadModules(const char* advectionData, const char* sparseMatrixData) {
     RETURN_ON_ERROR_CODE(loadAdvectionModule(advectionData));
@@ -39,7 +51,8 @@ EC::ErrorCode GPUSimulationDevice::loadSparseMatrixModule(const char* data) {
         "spRMultSubKernel",
         "saxpyKernel",
         "dotProductKernel",
-        "saxpbyKernel"
+        "saxpbyKernel",
+        "conjugateGradientMegakernel"
     };
 
     std::array<CUfunction*, kernelCount> kernelPointers;
@@ -265,10 +278,14 @@ EC::ErrorCode GPUSimulationDevice::dotProductInternal(
         (void*)&b,
         (void*)&result
     };
+    const int dynamicSharedMemSize = blockSize.x * sizeof(float);
     GPU::KernelLaunchParams params(
         gridSize,
         blockSize,
-        kernelParams
+        dynamicSharedMemSize,
+        0,
+        kernelParams,
+        nullptr
     );
     return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::dotProduct)], params);
 }
@@ -330,6 +347,7 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradient(
     if(maxIterations == -1) {
         maxIterations = rows;
     }
+
     for(int i = 0; i < maxIterations; ++i) {
         *static_cast<float*>(pAp.getCPUAddress()) = 0.0f;
 
@@ -363,6 +381,133 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradient(
     }
     return EC::ErrorCode("Max iterations reached!");
 }
+
+EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
+    const SimMatrix matrix,
+    const float* const b,
+    const float* const x0,
+    float* const xOut,
+    int maxIterations,
+    float eps
+) {
+    using namespace GPU;
+    GPU::ScopedGPUContext ctxGuard(context);
+    GPUSparseMatrix& a = matrices[matrix];
+    // The algorithm in pseudo code is as follows:
+    // 1. r_0 = b - A.x_0
+    // 2. p_0 = r_0
+    // 3. for j = 0, j, ... until convergence/max iteratoions
+    // 4.	alpha_i = (r_j, r_j) / (A.p_j, p_j)
+    // 5.	x_{j+1} = x_j + alpha_j * p_j
+    // 6.	r_{j+1} = r_j - alpha_j * A.p_j
+    // 7. 	beta_j = (r_{j+1}, r_{j+1}) / (r_j, r_j)
+    // 8.	p_{j+1} = r_{j+1} + beta_j * p_j
+    const float epsSuared = eps * eps;
+    const int rows = a.getDenseRowCount();
+    const int64_t byteSize = rows * sizeof(float);
+    GPU::GPUBuffer x, ap, p, r,pAp, barrier, generation, newResidualNormSquared, residualNormSquared;
+
+    RETURN_ON_ERROR_CODE(ap.init(byteSize));
+    RETURN_ON_ERROR_CODE(p.init(byteSize));
+    RETURN_ON_ERROR_CODE(x.init(byteSize));
+    RETURN_ON_ERROR_CODE(r.init(byteSize));
+
+    RETURN_ON_ERROR_CODE(residualNormSquared.init(sizeof(float)));
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(residualNormSquared.getHandle(), 0, 1, 0));
+
+    RETURN_ON_ERROR_CODE(pAp.init(sizeof(float)));
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(pAp.getHandle(), 0, 1, 0));
+
+    RETURN_ON_ERROR_CODE(barrier.init(sizeof(unsigned int)));
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(barrier.getHandle(), 0, 1, 0));
+
+    RETURN_ON_ERROR_CODE(generation.init(sizeof(unsigned int)));
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(generation.getHandle(), 0, 1, 0));
+
+    RETURN_ON_ERROR_CODE(newResidualNormSquared.init(sizeof(float)));
+    RETURN_ON_CUDA_ERROR(cuMemsetD32Async(newResidualNormSquared.getHandle(), 0, 1, 0));
+
+    RETURN_ON_ERROR_CODE(x.uploadBuffer(x0, byteSize));
+    RETURN_ON_ERROR_CODE(p.uploadBuffer(b, byteSize));
+
+    RETURN_ON_ERROR_CODE(spRMultSub(matrix, p, x, r));
+    RETURN_ON_ERROR_CODE(p.copyFromAsync(r, 0));
+    RETURN_ON_ERROR_CODE(dotProductInternal(
+        rows,
+        r.getHandle(),
+        r.getHandle(),
+        residualNormSquared.getHandle()
+    ));
+    RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
+
+    if(maxIterations == -1) {
+        maxIterations = rows;
+    }
+
+    Dim3 blockSize(128);
+    const int dynamicSharedMemSize = blockSize.x * sizeof(float);
+    int numBlocksPerSm = 0;
+    cuOccupancyMaxActiveBlocksPerMultiprocessor(
+        &numBlocksPerSm,
+        sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)],
+        blockSize.x,
+        dynamicSharedMemSize
+    );
+    Dim3 gridSize(std::min(deviceSMCount * numBlocksPerSm, (rows + blockSize.x) / blockSize.x));
+    CGParams cgparams;
+    cgparams.rowStart = (int*)a.getRowStartHandle();
+    cgparams.columnIndex = (int*)a.getColumnIndexHandle();
+    cgparams.values = (float*)a.getValuesHandle();
+    cgparams.x = (float*)x.getHandle();
+    cgparams.p = (float*)p.getHandle();
+    cgparams.ap = (float*)ap.getHandle();
+    cgparams.r = (float*)r.getHandle();
+    cgparams.residualNormSquared = (float*)residualNormSquared.getHandle();
+    cgparams.newResidualNormSquared = (float*)newResidualNormSquared.getHandle();
+    cgparams.pAp = (float*)pAp.getHandle();
+    cgparams.barrier = (unsigned int*)barrier.getHandle();
+    cgparams.generation = (unsigned int*)generation.getHandle();
+    cgparams.rows = a.getDenseRowCount();
+    cgparams.maxIterations = maxIterations;
+    cgparams.epsSq = epsSuared;
+
+    void* kernelParams[] = {
+        (void*)&cgparams
+    };
+    // Used by the dot product function
+    GPU::KernelLaunchParams params(
+        gridSize,
+        blockSize,
+        dynamicSharedMemSize,
+        0,
+        kernelParams,
+        nullptr
+    );
+#if CUDA_VERSION >= 9000
+    if (cudaCooperativeGroupsSupported) {
+        RETURN_ON_CUDA_ERROR(
+            cuLaunchCooperativeKernel(
+                sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)],
+                gridSize.x, gridSize.y, gridSize.z,
+                blockSize.x, blockSize.y, blockSize.z,
+                dynamicSharedMemSize,
+                0,
+                kernelParams
+            ))
+    } else {
+        RETURN_ON_ERROR_CODE(callKernel(sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)], params));
+    }
+#else
+    RETURN_ON_ERROR_CODE(callKernel(sparseMatrixKernels[int(SparseMatrixKernels::conjugateGradientMegakernel)], params));
+#endif
+    float newResidual;
+    newResidualNormSquared.downloadBuffer(&newResidual);
+    if(newResidual < epsSuared) {
+        return x.downloadBuffer(xOut);
+    }
+    return EC::ErrorCode("Max iterations reached!");
+}
+
 
 GPUSimulationDeviceManager::GPUSimulationDeviceManager() : 
     GPUDeviceManagerBase<GPUSimulationDevice>()

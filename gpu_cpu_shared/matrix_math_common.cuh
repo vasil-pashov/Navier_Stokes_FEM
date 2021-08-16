@@ -11,7 +11,10 @@ struct CGParams {
     float* residualNormSquared;
     float* newResidualNormSquared;
     float* pAp;
-    int* barrier;
+    unsigned int* barrier;
+    unsigned int* generation;
     int rows;
+    int maxIterations;
+    float epsSq;
 };
 #endif

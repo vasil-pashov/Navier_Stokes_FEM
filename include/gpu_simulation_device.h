@@ -21,6 +21,7 @@ namespace GPUSimulation {
             pressureDivergence,
             count
         };
+        EC::ErrorCode init(int index);
         EC::ErrorCode loadModules(const char* advectionData, const char* sparseMatrixData);
         EC::ErrorCode uploadKDTree(const NSFem::KDTreeCPUOwner& cpuOwner);
         EC::ErrorCode initVelocityBuffers(const int numElements);
@@ -59,6 +60,15 @@ namespace GPUSimulation {
         );
 
         EC::ErrorCode conjugateGradient(
+            const SimMatrix matrix,
+            const float* const b,
+            const float* const x0,
+            float* const x,
+            int maxIterations,
+            float eps
+        );
+
+        EC::ErrorCode conjugateGradientMegaKernel(
             const SimMatrix matrix,
             const float* const b,
             const float* const x0,
@@ -136,6 +146,7 @@ namespace GPUSimulation {
             saxpy,
             dotProduct,
             saxpby,
+            conjugateGradientMegakernel,
             count
         };
 
@@ -150,6 +161,8 @@ namespace GPUSimulation {
 
         GPU::GPUBuffer uVelocityOutBuffer;
         GPU::GPUBuffer vVelocityOutBuffer;
+
+        int cudaCooperativeGroupsSupported;
     };
 
     class GPUSimulationDeviceManager : public GPU::GPUDeviceManagerBase<GPUSimulationDevice> {

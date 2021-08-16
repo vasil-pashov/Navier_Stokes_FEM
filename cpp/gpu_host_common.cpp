@@ -77,6 +77,7 @@ EC::ErrorCode GPUDeviceBase::init(int index) {
     printf("Initializing device: %s\n", name);
     printDeviceInfo();
     RETURN_ON_CUDA_ERROR(cuDevicePrimaryCtxRetain(&context, deviceHandle));
+    RETURN_ON_CUDA_ERROR(cuDeviceGetAttribute(&deviceSMCount, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, deviceHandle));
     return EC::ErrorCode();
 }
 
