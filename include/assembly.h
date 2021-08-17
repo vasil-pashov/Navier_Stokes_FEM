@@ -23,7 +23,7 @@
 
 // If this is defined all matrices will be uploaded to the GPU. Conjugate Gradient will use GPU implementation
 // of the vector matrix product.
-#define GPU_CONJUGATE_GRADIENT
+// #define GPU_CONJUGATE_GRADIENT
 
 #if defined(GPU_CONJUGATE_GRADIENT) || defined(GPU_ADVECTION)
     #define GPU_SETUP
@@ -1061,6 +1061,7 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
 
 template<typename VelocityShape, typename PressureShape>
 EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::assembleAllMatrices() {
+    PROFILING_SCOPED_TIMER_FUN();
     // The number of async tasks which will be launced in the task group
     const int numTasks = 5;
     // List of error codes where each async task will write its output error code
@@ -1274,7 +1275,6 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
     const real eps = 1e-8;
 
 {
-    PROFILING_SCOPED_TIMER_CUSTOM("Time iteration");
     for(int timeStep = 1; timeStep < steps; ++timeStep) {
         SMM::SolverStatus solveStatus = SMM::SolverStatus::SUCCESS;
 // ==================================================================================
@@ -1320,6 +1320,8 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
                 }
             }
         }
+        {
+        PROFILING_SCOPED_TIMER_CUSTOM("Solve for pressure stiffness");
 #ifdef GPU_CONJUGATE_GRADIENT
         RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
             GPUSimulation::GPUSimulationDevice::pressureSitffness,
@@ -1346,6 +1348,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
             return EC::ErrorCode(int(solveStatus), "Failed to solve: pressureStiffness * currentPressureSolution = pressureRhs");
         }
 #endif
+        }
 
         // After the pressure is found, we must use it to find the "tentative" velocity.
         // First find the right hand side of the tentative velocity.
@@ -1357,6 +1360,8 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
         // U and v components of the tentative velocity and the u and v components of the diffused velocity are independent.
         // This function can find one final velocity component. It first finds the tentative velocity and then perfrms the diffusion.
         auto diffusionSolve = [&](real* currentVelocitySolution, real* velocityRhs, real* advectedVelocity, VelocityChannel ch) {
+            {
+            PROFILING_SCOPED_TIMER_CUSTOM("Solve with velocity mass matrix");
 #ifdef GPU_CONJUGATE_GRADIENT
             RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
                 GPUSimulation::GPUSimulationDevice::velocityMass,
@@ -1383,6 +1388,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
                 return EC::ErrorCode(int(status), "Failed to solve velocityMassMatrix * advectedVelocity = velocityRhs");
             }
 #endif
+            }
             for(int i = 0; i < nodesCount; ++i) {
                 currentVelocitySolution[i] += advectedVelocity[i];
             }
@@ -1413,6 +1419,8 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
                     }
                 }
             }
+            {
+            PROFILING_SCOPED_TIMER_CUSTOM("Solve with diffusion matrix");
 #ifdef GPU_CONJUGATE_GRADIENT
             {
                 RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
@@ -1426,7 +1434,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
             }
 #else
             // Find the final velocity at the current time step
-            status = SMM::ConjugateGradient(
+            SMM::SolverStatus status = SMM::ConjugateGradient(
                 diffusionMatrix,
                 static_cast<real*>(velocityRhs),
                 static_cast<real*>(currentVelocitySolution),
@@ -1441,6 +1449,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
                 return EC::ErrorCode(int(status), "Failed to solve diffusionMatrix * currentVelocitySolution = velocityRhs");
             }
 #endif
+            }
             return EC::ErrorCode();
         };
 
@@ -1584,6 +1593,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::advect(
     real* const uVelocityOut,
     real* const vVelocityOut
 ) {
+    PROFILING_SCOPED_TIMER_FUN();
     const int velocityNodesCount = grid.getNodesCount();
 #ifdef GPU_ADVECTION
     auto& gpuDevice = getSelectedGPUDevice();
