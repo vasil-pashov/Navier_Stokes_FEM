@@ -1389,9 +1389,11 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
             }
 #endif
             }
-            for(int i = 0; i < nodesCount; ++i) {
-                currentVelocitySolution[i] += advectedVelocity[i];
-            }
+            tbb::parallel_for(tbb::blocked_range<int>(0, nodesCount), [&](const tbb::blocked_range<int>& range) {
+                for(int i = range.begin(); i < range.end(); ++i) {
+                    currentVelocitySolution[i] += advectedVelocity[i];
+                }
+            });
 
             std::unordered_map<char, float> velocityVars;
             // Compute the right hand side for the diffused channel
