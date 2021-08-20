@@ -24,9 +24,12 @@ def parseArgs():
 def parseOutput(otput, allFunctionTimes):
     pattern = re.compile("\[Scoped Timer\]\[(.*)\] ([-+]?\d*\.\d+|\d+)s")
     allMatches = re.findall(pattern, otput)
+    totalTimePerFun = defaultdict(lambda: 0)
     for (fn, time) in allMatches:
         print("{}: {}".format(fn, time))
-        allFunctionTimes[fn].append(float(time))
+        totalTimePerFun[fn] += float(time)
+    for (fn, time) in totalTimePerFun.items():
+        allFunctionTimes[fn].append(time)
 
 
 def processTimings(allFunctionTimes, totalRuns, showIndividualTimes):
@@ -60,6 +63,7 @@ def main():
     allFunctionTimes = defaultdict(lambda: [])
     for i in range(0, args.runs):
         try:
+            print("Start run: {}\n".format(i))
             result = subprocess.run(
                 command, capture_output=True, text=True, check=True)
             print("Run {} completed\n".format(i))
