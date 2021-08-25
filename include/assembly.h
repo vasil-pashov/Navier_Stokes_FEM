@@ -1322,6 +1322,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
         }
         {
         PROFILING_SCOPED_TIMER_CUSTOM("Solve for pressure stiffness");
+        PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
 #ifdef GPU_CONJUGATE_GRADIENT
         RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
             GPUSimulation::GPUSimulationDevice::pressureSitffness,
@@ -1362,6 +1363,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
         auto diffusionSolve = [&](real* currentVelocitySolution, real* velocityRhs, real* advectedVelocity, VelocityChannel ch) {
             {
             PROFILING_SCOPED_TIMER_CUSTOM("Solve with velocity mass matrix");
+            PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
 #ifdef GPU_CONJUGATE_GRADIENT
             RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
                 GPUSimulation::GPUSimulationDevice::velocityMass,
@@ -1423,6 +1425,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
             }
             {
             PROFILING_SCOPED_TIMER_CUSTOM("Solve with diffusion matrix");
+            PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
 #ifdef GPU_CONJUGATE_GRADIENT
             {
                 RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
