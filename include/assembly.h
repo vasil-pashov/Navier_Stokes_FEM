@@ -61,6 +61,17 @@ void drawVectorPlot(
     const int maxArrowLengthInPixels
 );
 
+void drawVectorPlotSVG(
+    const FemGrid2D& grid,
+    const real* const uVec,
+    const real* const vVec,
+    const real* const pressure,
+    const std::string& path,
+    const int width,
+    const int height,
+    const int maxArrowLengthInPixels
+);
+
 /// Find the smapplest triangle side all of all triangles. Used to scale the vector plot points.
 float findSmallestSide(const FemGrid2D& grid);
 
@@ -734,9 +745,8 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::exportSolution(const in
         assert(false && "Failed to open file for writing the result");
     }
 
-    const std::string& velocityFieldPath = outFolder + "/velocity_field_" + std::to_string(timeStep) + ".jpeg";
-    drawVectorPlot(
-        outputImage,
+    const std::string& velocityFieldPath = outFolder + "/velocity_field_" + std::to_string(timeStep) + ".svg";
+    drawVectorPlotSVG(
         grid,
         currentVelocitySolution,
         currentVelocitySolution + grid.getNodesCount(),

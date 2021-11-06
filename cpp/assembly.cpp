@@ -1,6 +1,7 @@
 #include "assembly.h"
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include "simple-svg/simple_svg_1.0.0.hpp"
 
 namespace NSFem {
 
@@ -19,29 +20,29 @@ static inline cv::Scalar color(uint8_t red, uint8_t green, uint8_t blue) {
 static cv::Scalar heatmap(const real x, const real start, const real end) {
     const int numColors = 4;
     const cv::Scalar colors[numColors] = {
-        color(0, 0, 255), // blue
-        color(0, 255, 0), // green
-        color(255, 255, 0), // yellow
-        color(255, 0, 0) // red
+        color(0, 0, 205), // blue
+        color(0, 205, 0), // green
+        color(205, 205, 0), // yellow
+        color(205, 0, 0) // red
     };
-    const real h = (end - start) / (numColors - 1);
-    if(std::abs(h) < 1e-4) {
+    if(x <= start) {
         return colors[0];
     }
-    cv::Scalar result(0, 0 ,0);
-    // Lagrangian interpolation
-    for(int i = 0; i < numColors; ++i) {
-        real mult = 1;
-        const real xi = start + i * h;
-        for(int j = 0; j < numColors; ++j) {
-            if(j != i) {
-                const real xj = start + j * h;
-                mult *= (xj - x) / (xj - xi);
-            }
-        }
-        result += mult * colors[i];
+    if(x >= end) {
+        return colors[numColors - 1];
     }
-    return result;
+    const float h = (end - start) / 3.0f;
+    int i = 0;
+    while(x >= i * h) {
+        ++i;
+    }
+    const float x0 = (i-1)*h;
+    const float x1 = i*h;
+    cv::Scalar res = colors[i-1] * ((x1 - x) / h) + colors[i] * ((x - x0) / h);
+    for(int i = 0; i < 3; ++i) {
+        res[i] = std::min(std::max(0, (int)res[i]), 255);
+    }
+    return res;
 }
 
 float findSmallestSide(const FemGrid2D& grid) {
@@ -58,6 +59,108 @@ float findSmallestSide(const FemGrid2D& grid) {
         res = std::min(res, minSide);
     }
     return sqrt(res);
+}
+
+void drawVectorPlotSVG(
+    const FemGrid2D& grid,
+    const real* const uVec,
+    const real* const vVec,
+    const real* const pressure,
+    const std::string& path,
+    const int width,
+    const int height,
+    const int maxArrowLengthInPixels
+) {
+    // First find the maximal length, it will be used to as an end interval during heatmap
+    // interpolation. Then find the max and min coordinate in x and y directions, this is
+    // used when drawing the image. We want to keep the aspect ratio when drawing the grid
+    // even when the image width and heigh have different aspect ratio. This means that the
+    // mapping between the sim region and the image won't be 1:1.
+    const real* nodes = grid.getNodesBuffer();
+    real minX = nodes[0];
+    real maxX = nodes[0];
+    real minY = nodes[1];
+    real maxY = nodes[1];
+    real maxLenSq = 0;
+    const int numNodes = grid.getNodesCount();
+    for(int i = 0; i < numNodes; ++i) {
+        const real current = uVec[i] * uVec[i] + vVec[i] * vVec[i];
+        maxLenSq = std::max(maxLenSq, current);
+
+        minX = std::min(minX, nodes[2 * i]);
+        maxX = std::max(maxX, nodes[2 * i]);
+
+        minY = std::min(minY, nodes[2 * i + 1]);
+        maxY = std::max(maxY, nodes[2 * i + 1]);
+    }
+
+    const real xWidth = maxX - minX;
+    const real yWidth = maxY - minY;
+    const real ar = xWidth / yWidth;
+    // Find the proper scaling factor so the grid in image space has the same proportions
+    // as in world space
+    const real xScale = (width / xWidth);
+    const real yScale = width / (ar * yWidth);
+	const int xOffset = 26;
+	const int yOffset = 26;
+	svg::Document image(path, svg::Layout(svg::Dimensions(2*xOffset + width, 2*yOffset + std::ceil(width / ar)), svg::Layout::BottomLeft));
+
+	const int numElements = grid.getElementsCount();	
+	for(int i = 0; i < numElements; ++i) {
+		const int* element = grid.getElement(i);	
+		const Point2D& A = grid.getNode(element[0]);
+		const Point2D& B = grid.getNode(element[1]);
+		const Point2D& C = grid.getNode(element[2]);
+
+		const svg::Point svgA(xOffset+A.x * xScale - xScale * minX, yOffset+A.y * yScale - yScale * minY);
+		const svg::Point svgB(xOffset+B.x * xScale - xScale * minX, yOffset+B.y * yScale - yScale * minY);
+		const svg::Point svgC(xOffset+C.x * xScale - xScale * minX, yOffset+C.y * yScale - yScale * minY);
+		const svg::Line AB(svgA, svgB, svg::Stroke(0.5, svg::Color(0, 0, 0)));
+		const svg::Line AC(svgA, svgC, svg::Stroke(0.5, svg::Color(0, 0, 0)));
+		const svg::Line CB(svgC, svgB, svg::Stroke(0.5, svg::Color(0, 0, 0)));
+		image << AB;
+		image << AC;
+		image << CB;
+	}
+
+
+    const real maxLength = std::sqrt(maxLenSq);
+
+    for(int i = 0; i < numNodes; ++i) {
+        real maxU = uVec[0];
+        real maxV = vVec[0];
+        const real length = sqrt(uVec[i] * uVec[i] + vVec[i] * vVec[i]);
+        const real lengthScaled = maxLength != 0 ? length / maxLength : 0;
+        assert(lengthScaled <= 1);
+        const Point2D& node = grid.getNode(i);
+        Point2D direction = Point2D(uVec[i], vVec[i]) * (length > 0 ? 1.0 / maxLength : 0);
+        const Point2D& end = node + direction * (maxArrowLengthInPixels / xScale);
+
+        const real xImageSpace = xOffset + node.x * xScale - xScale * minX;
+        const real yImageSpace = yOffset + node.y * yScale - yScale * minY;
+
+        const real xEndImageSpace = xOffset + end.x * xScale - xScale * minX;
+        const real yEndImageSpace = yOffset + end.y * yScale  -yScale * minY;
+
+        maxU = std::max(maxU, (real)uVec[i]);
+        maxV = std::max(maxV, (real)vVec[i]);
+
+        const cv::Scalar velocityHeat = heatmap(lengthScaled, 0, 1);
+		if(length > 1e-6) {
+			svg::Point svgStart(xImageSpace, yImageSpace);
+			svg::Point svgEnd(xEndImageSpace, yEndImageSpace);
+			svg::Color c = svg::Color(velocityHeat[2], velocityHeat[1], velocityHeat[0]);
+			svg::Arrow svgArrow(
+					svgStart,
+					svgEnd,
+					svg::Stroke(4, c),
+					svg::Fill(c),
+					i
+			);
+			image << svgArrow;
+		}
+    }
+	image.save();
 }
 
 void drawVectorPlot(
