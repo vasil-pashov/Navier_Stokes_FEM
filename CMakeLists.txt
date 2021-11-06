@@ -89,6 +89,7 @@ add_executable(${PROJECT_NAME} ${CPP} ${HEADERS})
 target_include_directories(${PROJECT_NAME}
 	PRIVATE
 		include
+        vendor
 		gpu_cpu_shared
 		sparse_matrix_math/include)
 
