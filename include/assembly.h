@@ -485,6 +485,223 @@ private:
         real* const vVelocityOut
     );
 
+    EC::ErrorCode diffusionSolve(
+        real* velocityOut,
+        real* velocityRhs,
+        real* advectedVelocity,
+        VelocityChannel ch,
+        const real eps
+    ) {
+        std::unordered_map<char, float> velocityVars;
+        // Compute the right hand side for the diffused channel
+        velocityMassMatrix.rMult(advectedVelocity, velocityRhs);
+        // Take in to accound Dirchled condition and add them to the right hand side for the diffused channel
+        FemGrid2D::VelocityDirichletConstIt velocityDrichiletIt = grid.getVelocityDirichletBegin();
+        const FemGrid2D::VelocityDirichletConstIt velocityDrichiletEnd = grid.getVelocityDirichletEnd();
+        for(;velocityDrichiletIt != velocityDrichiletEnd; ++velocityDrichiletIt) {
+            const FemGrid2D::VelocityDirichlet& boundary = *velocityDrichiletIt;
+            for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+                const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+                const real x = grid.getNodesBuffer()[nodeIndex * 2];
+                const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+                velocityVars['x'] = x;
+                velocityVars['y'] = y;
+                float uBoundary = 0, vBoundary = 0;
+                boundary.eval(&velocityVars, uBoundary, vBoundary);
+                const float boundaryValue = ch == VelocityChannel::U ? uBoundary : vBoundary;
+                velocityRhs[nodeIndex] = boundaryValue;
+                SMM::CSRMatrix<real>::ConstRowIterator it = velocityDirichletWeights.rowBegin(nodeIndex);
+                const SMM::CSRMatrix<real>::ConstRowIterator end = velocityDirichletWeights.rowEnd(nodeIndex);
+                while(it != end) {
+                    velocityRhs[it->getCol()] -= it->getValue() * boundaryValue;
+                    ++it;
+                }
+            }
+        }
+        {
+        PROFILING_SCOPED_TIMER_CUSTOM("Solve with diffusion matrix");
+        PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
+#ifdef GPU_CONJUGATE_GRADIENT
+        {
+            RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+                GPUSimulation::GPUSimulationDevice::diffusion,
+                static_cast<real*>(velocityRhs),
+                static_cast<real*>(advectedVelocity),
+                static_cast<real*>(velocityOut),
+                -1,
+                eps
+            ));
+        }
+#else
+        // Find the final velocity at the current time step
+        SMM::SolverStatus status = SMM::ConjugateGradient(
+            diffusionMatrix,
+            static_cast<real*>(velocityRhs),
+            static_cast<real*>(advectedVelocity),
+            static_cast<real*>(velocityOut),
+            -1,
+            eps
+            #ifdef USE_PRECONDITIONING
+            ,diffusionIC0
+            #endif
+        );
+        if(status != SMM::SolverStatus::SUCCESS) {
+            return EC::ErrorCode(int(status), "Failed to solve diffusionMatrix * currentVelocitySolution = velocityRhs");
+        }
+#endif
+        }
+        return EC::ErrorCode();
+    };
+
+    EC::ErrorCode applyPressure(
+        const real* velocityIn,
+        real* velocityOut,
+        real* pressureRhs,
+        real* velocityRhs,
+        const real eps
+    ) {
+    std::unordered_map<char, float> velocityVars;
+    const int nodesCount = grid.getNodesCount();
+    // Solve for the pressure. As pressure is "implicitly" stepped Dirchlet boundary conditions cannot be imposed after
+    // solving the linear system. For this reason the pressure stiffness matrix was tweaked before time iterations begin.
+    // Now at each time step the right hand side must be tweaked as well.
+
+    // Find the right hand side
+    std::unordered_map<char, float> pressureVars;
+    velocityDivergenceMatrix.rMult(velocityIn, pressureRhs);
+
+    // Now impose the Dirichlet Boundary Conditions
+    FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichletBegin();
+    const FemGrid2D::PressureDirichletConstIt pressureDrichiletEnd = grid.getPressureDirichletEnd();
+    for(;pressureDrichiletIt != pressureDrichiletEnd; ++pressureDrichiletIt) {
+        const FemGrid2D::PressureDirichlet& boundary = *pressureDrichiletIt;
+        for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+            const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+            const real x = grid.getNodesBuffer()[nodeIndex * 2];
+            const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+            pressureVars['x'] = x;
+            pressureVars['y'] = y;
+            float pBoundary = 0;
+            boundary.eval(&pressureVars, pBoundary);
+            pressureRhs[nodeIndex] = pBoundary;
+            SMM::CSRMatrix<real>::ConstRowIterator it = pressureDirichletWeights.rowBegin(nodeIndex);
+            const SMM::CSRMatrix<real>::ConstRowIterator end = pressureDirichletWeights.rowEnd(nodeIndex);
+            while(it != end) {
+                pressureRhs[it->getCol()] -= it->getValue() * pBoundary;
+                ++it;
+            }
+        }
+    }
+    {
+    PROFILING_SCOPED_TIMER_CUSTOM("Solve for pressure stiffness");
+    PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
+#ifdef GPU_CONJUGATE_GRADIENT
+    RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+        GPUSimulation::GPUSimulationDevice::pressureSitffness,
+        static_cast<real*>(pressureRhs),
+        static_cast<real*>(currentPressureSolution),
+        static_cast<real*>(currentPressureSolution),
+        -1,
+        eps
+    ));
+#else
+    // Finally solve the linear system for the pressure
+    SMM::SolverStatus solveStatus = SMM::ConjugateGradient(
+        pressureStiffnessMatrix,
+        static_cast<real*>(pressureRhs),
+        static_cast<real*>(currentPressureSolution),
+        static_cast<real*>(currentPressureSolution),
+        -1,
+        eps
+        #ifdef USE_PRECONDITIONING
+        ,pressureStiffnessIC0
+        #endif
+    );
+    if(solveStatus != SMM::SolverStatus::SUCCESS) {
+        return EC::ErrorCode(int(solveStatus), "Failed to solve: pressureStiffness * currentPressureSolution = pressureRhs");
+    }
+#endif
+    }
+
+    // After the pressure is found, we must use it to find the "tentative" velocity.
+    // First find the right hand side of the tentative velocity.
+    pressureDivergenceMatrix.rMult(currentPressureSolution, velocityRhs);
+    {
+        PROFILING_SCOPED_TIMER_CUSTOM("Solve with velocity mass matrix");
+        PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
+#ifdef GPU_CONJUGATE_GRADIENT
+        RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+            GPUSimulation::GPUSimulationDevice::velocityMass,
+            static_cast<real*>(velocityRhs),
+            static_cast<real*>(velocityIn),
+            static_cast<real*>(velocityOut),
+            -1,
+            eps
+        ));
+        RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+            GPUSimulation::GPUSimulationDevice::velocityMass,
+            static_cast<real*>(velocityRhs + nodesCount),
+            static_cast<real*>(velocityIn + nodesCount),
+            static_cast<real*>(velocityOut + nodesCount),
+            -1,
+            eps
+        ));
+#else
+        // Apply the pressure to both velocity channels
+        SMM::SolverStatus status = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            velocityRhs,
+            velocityIn,
+            velocityOut,
+            -1,
+            eps
+            #ifdef USE_PRECONDITIONING
+            ,velocityMassIC0
+            #endif
+        );
+        status = SMM::ConjugateGradient(
+            velocityMassMatrix,
+            (real*)velocityRhs + nodesCount,
+            velocityIn + nodesCount,
+            velocityOut + nodesCount,
+            -1,
+            eps
+            #ifdef USE_PRECONDITIONING
+            ,velocityMassIC0
+            #endif
+        );
+        if(status != SMM::SolverStatus::SUCCESS) {
+            return EC::ErrorCode(int(status), "Failed to solve velocityMassMatrix * advectedVelocity = velocityRhs");
+        }
+#endif
+        }
+        tbb::parallel_for(tbb::blocked_range<int>(0, 2 * nodesCount), [&](const tbb::blocked_range<int>& range) {
+            for(int i = range.begin(); i < range.end(); ++i) {
+                velocityOut[i] += velocityIn[i];
+            }
+        });
+
+        FemGrid2D::VelocityDirichletConstIt velocityDrichiletIt = grid.getVelocityDirichletBegin();
+        const FemGrid2D::VelocityDirichletConstIt velocityDrichiletEnd = grid.getVelocityDirichletEnd();
+        for(;velocityDrichiletIt != velocityDrichiletEnd; ++velocityDrichiletIt) {
+            const FemGrid2D::VelocityDirichlet& boundary = *velocityDrichiletIt;
+            for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
+                const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
+                const real x = grid.getNodesBuffer()[nodeIndex * 2];
+                const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
+                velocityVars['x'] = x;
+                velocityVars['y'] = y;
+                float uBoundary = 0, vBoundary = 0;
+                boundary.eval(&velocityVars, uBoundary, vBoundary);
+                velocityOut[nodeIndex] = uBoundary;
+                velocityOut[nodeIndex + nodesCount] = vBoundary;
+            }
+        }
+
+
+        return EC::ErrorCode();
+    };
+
 #ifdef GPU_SETUP
     /// A Device manager which owns all GPU devices which will be used for simulation purposes.
     /// It loads the simulation kernels for each device and is used to call each kernel.
@@ -832,7 +1049,7 @@ NavierStokesAssembly<VelocityShape, PressureShape>::NavierStokesAssembly() :
 
 template<typename VelocityShape, typename PressureShape>
 void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
-    
+    std::unordered_map<char, float> pressureVars;
     SMM::CSRMatrix<real> convectionMatrix; 
 
     SMM::TripletMatrix<real> triplet(grid.getNodesCount(), grid.getNodesCount());
@@ -885,8 +1102,6 @@ void NavierStokesAssembly<VelocityShape, PressureShape>::solve() {
     SMM::Vector<real> velocityRhs(nodesCount * 2, 0);
     SMM::Vector<real> pressureRhs(grid.getPressureNodesCount(), real(0));
     SMM::Vector<real> tmp(nodesCount);
-
-    std::unordered_map<char, float> pressureVars;
 
     exportSolution(0);
 
@@ -1279,8 +1494,6 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
     SMM::Vector<real> pressureRhs(grid.getPressureNodesCount(), real(0));
     SMM::Vector<real> tmp(nodesCount * 2, 0);
 
-    std::unordered_map<char, float> pressureVars;
-
     exportSolution(0);
     const real eps = 1e-8;
 
@@ -1298,197 +1511,29 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
         ));
 
 // ==================================================================================
-// ============================== PRESSURE SOLVE ====================================
-// ==================================================================================
-
-        // Solve for the pressure. As pressure is "implicitly" stepped Dirchlet boundary conditions cannot be imposed after
-        // solving the linear system. For this reason the pressure stiffness matrix was tweaked before time iterations begin.
-        // Now at each time step the right hand side must be tweaked as well.
-
-        // Find the right hand side
-        velocityDivergenceMatrix.rMult(tmp, pressureRhs);
-
-        // Now impose the Dirichlet Boundary Conditions
-        FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichletBegin();
-        const FemGrid2D::PressureDirichletConstIt pressureDrichiletEnd = grid.getPressureDirichletEnd();
-        for(;pressureDrichiletIt != pressureDrichiletEnd; ++pressureDrichiletIt) {
-            const FemGrid2D::PressureDirichlet& boundary = *pressureDrichiletIt;
-            for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
-                const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
-                const real x = grid.getNodesBuffer()[nodeIndex * 2];
-                const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
-                pressureVars['x'] = x;
-                pressureVars['y'] = y;
-                float pBoundary = 0;
-                boundary.eval(&pressureVars, pBoundary);
-                pressureRhs[nodeIndex] = pBoundary;
-                SMM::CSRMatrix<real>::ConstRowIterator it = pressureDirichletWeights.rowBegin(nodeIndex);
-                const SMM::CSRMatrix<real>::ConstRowIterator end = pressureDirichletWeights.rowEnd(nodeIndex);
-                while(it != end) {
-                    pressureRhs[it->getCol()] -= it->getValue() * pBoundary;
-                    ++it;
-                }
-            }
-        }
-        {
-        PROFILING_SCOPED_TIMER_CUSTOM("Solve for pressure stiffness");
-        PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
-#ifdef GPU_CONJUGATE_GRADIENT
-        RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
-            GPUSimulation::GPUSimulationDevice::pressureSitffness,
-            static_cast<real*>(pressureRhs),
-            static_cast<real*>(currentPressureSolution),
-            static_cast<real*>(currentPressureSolution),
-            -1,
-            eps
-        ));
-#else
-        // Finally solve the linear system for the pressure
-        solveStatus = SMM::ConjugateGradient(
-            pressureStiffnessMatrix,
-            static_cast<real*>(pressureRhs),
-            static_cast<real*>(currentPressureSolution),
-            static_cast<real*>(currentPressureSolution),
-            -1,
-            eps
-            #ifdef USE_PRECONDITIONING
-            ,pressureStiffnessIC0
-            #endif
-        );
-        if(solveStatus != SMM::SolverStatus::SUCCESS) {
-            return EC::ErrorCode(int(solveStatus), "Failed to solve: pressureStiffness * currentPressureSolution = pressureRhs");
-        }
-#endif
-        }
-
-        // After the pressure is found, we must use it to find the "tentative" velocity.
-        // First find the right hand side of the tentative velocity.
-        pressureDivergenceMatrix.rMult(currentPressureSolution, velocityRhs);
-
-// ==================================================================================
 // ============================= DIFFUSION SOLVE ====================================
 // ==================================================================================
-        // U and v components of the tentative velocity and the u and v components of the diffused velocity are independent.
-        // This function can find one final velocity component. It first finds the tentative velocity and then perfrms the diffusion.
-        auto diffusionSolve = [&](real* currentVelocitySolution, real* velocityRhs, real* advectedVelocity, VelocityChannel ch) {
-            {
-            PROFILING_SCOPED_TIMER_CUSTOM("Solve with velocity mass matrix");
-            PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
-#ifdef GPU_CONJUGATE_GRADIENT
-            RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
-                GPUSimulation::GPUSimulationDevice::velocityMass,
-                static_cast<real*>(velocityRhs),
-                static_cast<real*>(advectedVelocity),
-                static_cast<real*>(currentVelocitySolution),
-                -1,
-                eps
-            ));
-#else
-            // Find the tentative velocity 
-            SMM::SolverStatus status = SMM::ConjugateGradient(
-                velocityMassMatrix,
-                static_cast<real*>(velocityRhs),
-                static_cast<real*>(advectedVelocity),
-                static_cast<real*>(currentVelocitySolution),
-                -1,
-                eps
-                #ifdef USE_PRECONDITIONING
-                ,velocityMassIC0
-                #endif
-            );
-            if(status != SMM::SolverStatus::SUCCESS) {
-                return EC::ErrorCode(int(status), "Failed to solve velocityMassMatrix * advectedVelocity = velocityRhs");
-            }
-#endif
-            }
-            tbb::parallel_for(tbb::blocked_range<int>(0, nodesCount), [&](const tbb::blocked_range<int>& range) {
-                for(int i = range.begin(); i < range.end(); ++i) {
-                    currentVelocitySolution[i] += advectedVelocity[i];
-                }
-            });
+        RETURN_ON_ERROR_CODE(diffusionSolve(
+            currentVelocitySolution,
+            velocityRhs,
+            tmp,
+            VelocityChannel::U,
+            eps
+        ));
 
-            std::unordered_map<char, float> velocityVars;
-            // Compute the right hand side for the diffused channel
-            velocityMassMatrix.rMult(currentVelocitySolution, velocityRhs);
-            // Take in to accound Dirchled condition and add them to the right hand side for the diffused channel
-            FemGrid2D::VelocityDirichletConstIt velocityDrichiletIt = grid.getVelocityDirichletBegin();
-            const FemGrid2D::VelocityDirichletConstIt velocityDrichiletEnd = grid.getVelocityDirichletEnd();
-            for(;velocityDrichiletIt != velocityDrichiletEnd; ++velocityDrichiletIt) {
-                const FemGrid2D::VelocityDirichlet& boundary = *velocityDrichiletIt;
-                for(int boundaryNodeIndex = 0; boundaryNodeIndex < boundary.getSize(); ++boundaryNodeIndex) {
-                    const int nodeIndex = boundary.getNodeIndexes()[boundaryNodeIndex];
-                    const real x = grid.getNodesBuffer()[nodeIndex * 2];
-                    const real y = grid.getNodesBuffer()[nodeIndex * 2 + 1];
-                    velocityVars['x'] = x;
-                    velocityVars['y'] = y;
-                    float uBoundary = 0, vBoundary = 0;
-                    boundary.eval(&velocityVars, uBoundary, vBoundary);
-                    const float boundaryValue = ch == VelocityChannel::U ? uBoundary : vBoundary;
-                    velocityRhs[nodeIndex] = boundaryValue;
-                    SMM::CSRMatrix<real>::ConstRowIterator it = velocityDirichletWeights.rowBegin(nodeIndex);
-                    const SMM::CSRMatrix<real>::ConstRowIterator end = velocityDirichletWeights.rowEnd(nodeIndex);
-                    while(it != end) {
-                        velocityRhs[it->getCol()] -= it->getValue() * boundaryValue;
-                        ++it;
-                    }
-                }
-            }
-            {
-            PROFILING_SCOPED_TIMER_CUSTOM("Solve with diffusion matrix");
-            PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
-#ifdef GPU_CONJUGATE_GRADIENT
-            {
-                RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
-                    GPUSimulation::GPUSimulationDevice::diffusion,
-                    static_cast<real*>(velocityRhs),
-                    static_cast<real*>(currentVelocitySolution),
-                    static_cast<real*>(currentVelocitySolution),
-                    -1,
-                    eps
-                ));
-            }
-#else
-            // Find the final velocity at the current time step
-            SMM::SolverStatus status = SMM::ConjugateGradient(
-                diffusionMatrix,
-                static_cast<real*>(velocityRhs),
-                static_cast<real*>(currentVelocitySolution),
-                static_cast<real*>(currentVelocitySolution),
-                -1,
-                eps
-                #ifdef USE_PRECONDITIONING
-                ,diffusionIC0
-                #endif
-            );
-            if(status != SMM::SolverStatus::SUCCESS) {
-                return EC::ErrorCode(int(status), "Failed to solve diffusionMatrix * currentVelocitySolution = velocityRhs");
-            }
-#endif
-            }
-            return EC::ErrorCode();
-        };
+        RETURN_ON_ERROR_CODE(diffusionSolve(
+            currentVelocitySolution + nodesCount,
+            velocityRhs + nodesCount,
+            tmp + nodesCount,
+            VelocityChannel::V,
+            eps
+        ));
 
-        // Multithreaded per channel computation is commented until tests are made to clear out
-        // it it makes the program run faster when the sparse matrix vector product is multthreaded
-        //g.run([&](){
-            RETURN_ON_ERROR_CODE(diffusionSolve(
-                currentVelocitySolution,
-                velocityRhs,
-                tmp,
-                VelocityChannel::U
-            ));
-        //});
-        // Multithreaded per channel computation is commented until tests are made to clear out
-        // it it makes the program run faster when the sparse matrix vector product is multthreaded
-        //g.run_and_wait([&](){
-            RETURN_ON_ERROR_CODE(diffusionSolve(
-                currentVelocitySolution + nodesCount,
-                velocityRhs + nodesCount,
-                tmp + nodesCount,
-                VelocityChannel::V
-            ));
-        //});
-
+// ==================================================================================
+// ============================== PRESSURE SOLVE ====================================
+// ==================================================================================
+        applyPressure(currentVelocitySolution, tmp, (real*)pressureRhs, (real*)velocityRhs, eps);
+        tmp.swap(currentVelocitySolution);
         exportSolution(timeStep);
 
     }
