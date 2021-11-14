@@ -1301,12 +1301,16 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
 // ============================== PRESSURE SOLVE ====================================
 // ==================================================================================
 
+        auto applyPressure = [&](
+            const real* velocityIn,
+            real* velocityOut
+        ){
         // Solve for the pressure. As pressure is "implicitly" stepped Dirchlet boundary conditions cannot be imposed after
         // solving the linear system. For this reason the pressure stiffness matrix was tweaked before time iterations begin.
         // Now at each time step the right hand side must be tweaked as well.
 
         // Find the right hand side
-        velocityDivergenceMatrix.rMult(tmp, pressureRhs);
+        velocityDivergenceMatrix.rMult(velocityIn, pressureRhs);
 
         // Now impose the Dirichlet Boundary Conditions
         FemGrid2D::PressureDirichletConstIt pressureDrichiletIt = grid.getPressureDirichletBegin();
@@ -1364,14 +1368,7 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
         // After the pressure is found, we must use it to find the "tentative" velocity.
         // First find the right hand side of the tentative velocity.
         pressureDivergenceMatrix.rMult(currentPressureSolution, velocityRhs);
-
-// ==================================================================================
-// ============================= DIFFUSION SOLVE ====================================
-// ==================================================================================
-        // U and v components of the tentative velocity and the u and v components of the diffused velocity are independent.
-        // This function can find one final velocity component. It first finds the tentative velocity and then perfrms the diffusion.
-        auto diffusionSolve = [&](real* currentVelocitySolution, real* velocityRhs, real* advectedVelocity, VelocityChannel ch) {
-            {
+        {
             PROFILING_SCOPED_TIMER_CUSTOM("Solve with velocity mass matrix");
             PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
 #ifdef GPU_CONJUGATE_GRADIENT
@@ -1387,9 +1384,20 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
             // Find the tentative velocity 
             SMM::SolverStatus status = SMM::ConjugateGradient(
                 velocityMassMatrix,
-                static_cast<real*>(velocityRhs),
-                static_cast<real*>(advectedVelocity),
-                static_cast<real*>(currentVelocitySolution),
+                (real*)velocityRhs,
+                velocityIn,
+                velocityOut,
+                -1,
+                eps
+                #ifdef USE_PRECONDITIONING
+                ,velocityMassIC0
+                #endif
+            );
+            status = SMM::ConjugateGradient(
+                velocityMassMatrix,
+                (real*)velocityRhs + nodesCount,
+                velocityIn + nodesCount,
+                velocityOut + nodesCount,
                 -1,
                 eps
                 #ifdef USE_PRECONDITIONING
@@ -1401,12 +1409,22 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
             }
 #endif
             }
-            tbb::parallel_for(tbb::blocked_range<int>(0, nodesCount), [&](const tbb::blocked_range<int>& range) {
+            tbb::parallel_for(tbb::blocked_range<int>(0, 2 * nodesCount), [&](const tbb::blocked_range<int>& range) {
                 for(int i = range.begin(); i < range.end(); ++i) {
-                    currentVelocitySolution[i] += advectedVelocity[i];
+                    velocityOut[i] += velocityIn[i];
                 }
             });
+            return EC::ErrorCode();
+        };
 
+        applyPressure(tmp, currentVelocitySolution);
+
+// ==================================================================================
+// ============================= DIFFUSION SOLVE ====================================
+// ==================================================================================
+        // U and v components of the tentative velocity and the u and v components of the diffused velocity are independent.
+        // This function can find one final velocity component. It first finds the tentative velocity and then perfrms the diffusion.
+        auto diffusionSolve = [&](real* currentVelocitySolution, real* velocityRhs, real* advectedVelocity, VelocityChannel ch) {
             std::unordered_map<char, float> velocityVars;
             // Compute the right hand side for the diffused channel
             velocityMassMatrix.rMult(currentVelocitySolution, velocityRhs);
@@ -1488,7 +1506,8 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::semiLagrangian
                 VelocityChannel::V
             ));
         //});
-
+        tmp.swap(currentVelocitySolution);
+        applyPressure(tmp, currentVelocitySolution);
         exportSolution(timeStep);
 
     }
