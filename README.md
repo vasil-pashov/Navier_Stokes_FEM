@@ -1,10 +1,11 @@
 # GPU implementation of the FEM for the Navier-Stokes equations
 
-This repository contains my MSc thesis on the subject of using GPUs to solve the Navier-Stokes equations using the Finite Element Method. For a brief summary check [below](##summary), for the full document check [MSc_Vasil_Pashov.pdf](MSc_Vasil_Pashov.pdf). This repo contains both CPU and GPU implementation of the described methods.
+This repository contains my MSc thesis on the subject of using GPUs to solve the Navier-Stokes equations using the Finite Element Method. For a brief summary check [below](#summary), for the full document check [MSc_Vasil_Pashov.pdf](MSc_Vasil_Pashov.pdf). This repo contains both CPU and GPU implementation of the described methods.
 
 ## Summary
 ### Navier-Stokes Equations
 The Navier-Stokes equations are a system of non-linear partial differential equations which describe the flow incompressible Newtonian fluids.
+
 $$
 \begin{align}
   % Conservation of momentum
@@ -43,3 +44,6 @@ Solving the equations as-is is a difficult problem, applying the FEM directly wo
 ### Dependencies
 * Check the [conanfile.txt](conanfile.txt).
 * The [Sparse Matrix Math](https://github.com/vasil-pashov/sparse_matrix_math/tree/master) library is added as a submodule
+
+### Source code map
+You can start reading from [main.cpp](cpp/main.cpp), the assembling of the FEM matrices and the solution of the equations happens in [assembly.h](include/assembly.h). The CPU implementation of the Conjugate Gradient method is implemented in the [Sparse Matrix Math](https://github.com/vasil-pashov/sparse_matrix_math/tree/master) library. The GPU implementation is in [gpu](gpu), [gpu_cpu_shared](gpu_cpu_shared) contains headers with structures which can be used both on CPU and on GPU. Most of the GPU device setup happens in [cpp/gpu_host_common.cpp](gpu_host_common.cpp) and [gpu_simulation_device.cpp](cpp/gpu_simulation_device.cpp), [expression.h](include/expression.h) and [expression.cpp](cpp/expression.cpp) contain expression tree which parses simple math formulas and can then plug variables into them and compute the result, it's used for the boundary conditions.
