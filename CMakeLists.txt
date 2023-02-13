@@ -194,12 +194,8 @@ target_include_directories(gpu_sim
 set_target_properties(gpu_sim
     PROPERTIES
 		CUDA_PTX_COMPILATION ON
-		CUDA_ARCHITECTURES 21)
+		CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}-virtual)
 
-target_compile_options(gpu_sim
-	PRIVATE
-		$<$<COMPILE_LANGUAGE:CUDA>:
-		-ffp-contract=fast>)
 if(${WITH_GPU_PROFILER})
 	target_compile_options(gpu_sim
 		PRIVATE
