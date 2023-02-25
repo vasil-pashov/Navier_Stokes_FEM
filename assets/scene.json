@@ -1,0 +1,6 @@
+{
+    "mesh_path": "./mesh_small.json",
+    "total_time": 1,
+    "viscosity": 0.001,
+    "dt": 0.01
+}
