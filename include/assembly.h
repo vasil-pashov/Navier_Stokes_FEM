@@ -526,16 +526,16 @@ private:
         PROFILING_SCOPED_TIMER_CUSTOM("Solve with diffusion matrix");
         PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
 #ifdef GPU_CONJUGATE_GRADIENT
-        {
+		{
 			RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
-                GPUSimulation::GPUSimulationDevice::diffusion,
-                static_cast<real*>(velocityRhs),
-                static_cast<real*>(advectedVelocity),
-                static_cast<real*>(velocityOut),
-                -1,
-                eps
-            ));
-        }
+				GPUSimulation::GPUSimulationDevice::diffusion,
+				static_cast<real*>(velocityRhs),
+				static_cast<real*>(advectedVelocity),
+				static_cast<real*>(velocityOut),
+				-1,
+				eps
+			));
+		}
 #else
         // Find the final velocity at the current time step
         SMM::SolverStatus status = SMM::ConjugateGradient(

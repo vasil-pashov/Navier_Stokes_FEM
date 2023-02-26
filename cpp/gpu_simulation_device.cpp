@@ -290,7 +290,7 @@ EC::ErrorCode GPUSimulationDevice::dotProductInternal(
     return callKernel(sparseMatrixKernels[int(SparseMatrixKernels::dotProduct)], params);
 }
 
-EC::ErrorCode GPUSimulationDevice::conjugateGradient(
+EC::ErrorCode GPUSimulationDevice::conjugateGradientMultiKernel(
     const SimMatrix matrix,
     const float* const b,
     const float* const x0,
@@ -440,6 +440,12 @@ EC::ErrorCode GPUSimulationDevice::conjugateGradientMegaKernel(
     ));
     RETURN_ON_CUDA_ERROR(cuStreamSynchronize(0));
 
+    
+    float residualNormSquaredHost = 0;
+	residualNormSquared.downloadBuffer(&residualNormSquaredHost);
+	if (epsSuared > residualNormSquaredHost) {
+		return EC::ErrorCode();
+    }
     if(maxIterations == -1) {
         maxIterations = rows;
     }

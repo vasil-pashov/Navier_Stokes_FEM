@@ -60,22 +60,20 @@ namespace GPUSimulation {
         );
 
         EC::ErrorCode conjugateGradient(
-            const SimMatrix matrix,
-            const float* const b,
-            const float* const x0,
-            float* const x,
-            int maxIterations,
-            float eps
-        );
-
-        EC::ErrorCode conjugateGradientMegaKernel(
-            const SimMatrix matrix,
-            const float* const b,
-            const float* const x0,
-            float* const x,
-            int maxIterations,
-            float eps
-        );
+			const SimMatrix matrix,
+			const float* const b,
+			const float* const x0,
+			float* const x,
+			int maxIterations,
+			float eps,
+            bool useMegakernel = true
+		) {
+            if (useMegakernel) {
+				return conjugateGradientMegaKernel(matrix, b, x0, x, maxIterations, eps);
+			} else {
+				return conjugateGradientMultiKernel(matrix, b, x0, x, maxIterations, eps);
+			}
+		}
 
         /// Perform a * x + b * y where a and b are scalars and x and y are vectors.
         /// @param[in] vectorLength The number of elements in vectors x and y
@@ -118,6 +116,48 @@ namespace GPUSimulation {
         );
 
     private:
+		/// @brief Solve a linear system using the Conjugate Gradient Method
+		/// Each computation (dot product, vector addition, vector matrix multiplication) is
+		/// implemented as a separate kernel and is invoked separately.
+		/// @note This is usually way slower than the megakernel approach
+		/// @param matrix Which type of matrix involved in the NS equation is used for the system
+		/// @param b The right hand side of the equation
+		/// @param x0 The initial guess
+		/// @param x The result
+		/// @param maxIterations Limit the number of equations. If -1 is passed the number of
+		/// equations is the theoretical maximum (the number of rows)
+		/// @param eps Error tolerance. When the residual becomes less than this, the system is
+		/// considered solved
+		EC::ErrorCode conjugateGradientMultiKernel(
+			const SimMatrix matrix,
+			const float* const b,
+			const float* const x0,
+			float* const x,
+			int maxIterations,
+			float eps
+		);
+
+		/// @brief Solve a linear system using the Conjugate Gradient Method
+		/// The whole iteration step is implemented as a one kernel call which incorporates all
+		/// computations such as dot product, vector addition, vector matrix multiplication.
+		/// @note This is usually way faster than the multikernel approach
+		/// @param matrix Which type of matrix involved in the NS equation is used for the system
+		/// @param b The right hand side of the equation
+		/// @param x0 The initial guess
+		/// @param x The result
+		/// @param maxIterations Limit the number of equations. If -1 is passed the number of
+		/// equations is the theoretical maximum (the number of rows)
+		/// @param eps Error tolerance. When the residual becomes less than this, the system is
+		/// considered solved
+		EC::ErrorCode conjugateGradientMegaKernel(
+			const SimMatrix matrix,
+			const float* const b,
+			const float* const x0,
+			float* const x,
+			int maxIterations,
+			float eps
+		);
+
         EC::ErrorCode dotProductInternal(
             const int vectorLength,
             CUdeviceptr a,
