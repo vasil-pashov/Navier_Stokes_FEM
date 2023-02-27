@@ -8,6 +8,7 @@
 #include <string>
 #include <nlohmann/json.hpp>
 #include <opencv2/imgproc.hpp>
+#include <filesystem>
 #include "timer.h"
 #include "tbb/blocked_range.h"
 #include "tbb/parallel_for.h"
@@ -25,7 +26,7 @@
 // of the vector matrix product.
 // #define GPU_CONJUGATE_GRADIENT
 
-#if defined(GPU_CONJUGATE_GRADIENT) || defined(GPU_ADVECTION)
+#if (defined(GPU_CONJUGATE_GRADIENT) || defined(GPU_ADVECTION)) && !defined(GPU_SETUP)
     #define GPU_SETUP
 #endif
 
@@ -492,6 +493,9 @@ private:
         VelocityChannel ch,
         const real eps
     ) {
+#ifdef GPU_SETUP
+		auto& gpuDevice = getSelectedGPUDevice();
+#endif
         std::unordered_map<char, float> velocityVars;
         // Compute the right hand side for the diffused channel
         velocityMassMatrix.rMult(advectedVelocity, velocityRhs);
@@ -522,16 +526,16 @@ private:
         PROFILING_SCOPED_TIMER_CUSTOM("Solve with diffusion matrix");
         PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
 #ifdef GPU_CONJUGATE_GRADIENT
-        {
-            RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
-                GPUSimulation::GPUSimulationDevice::diffusion,
-                static_cast<real*>(velocityRhs),
-                static_cast<real*>(advectedVelocity),
-                static_cast<real*>(velocityOut),
-                -1,
-                eps
-            ));
-        }
+		{
+			RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+				GPUSimulation::GPUSimulationDevice::diffusion,
+				static_cast<real*>(velocityRhs),
+				static_cast<real*>(advectedVelocity),
+				static_cast<real*>(velocityOut),
+				-1,
+				eps
+			));
+		}
 #else
         // Find the final velocity at the current time step
         SMM::SolverStatus status = SMM::ConjugateGradient(
@@ -560,6 +564,11 @@ private:
         real* velocityRhs,
         const real eps
     ) {
+
+    #ifdef GPU_SETUP
+		auto& gpuDevice = getSelectedGPUDevice();
+    #endif
+
     std::unordered_map<char, float> velocityVars;
     const int nodesCount = grid.getNodesCount();
     // Solve for the pressure. As pressure is "implicitly" stepped Dirchlet boundary conditions cannot be imposed after
@@ -596,7 +605,7 @@ private:
     PROFILING_SCOPED_TIMER_CUSTOM("Solve for pressure stiffness");
     PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
 #ifdef GPU_CONJUGATE_GRADIENT
-    RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+	RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
         GPUSimulation::GPUSimulationDevice::pressureSitffness,
         static_cast<real*>(pressureRhs),
         static_cast<real*>(currentPressureSolution),
@@ -630,19 +639,19 @@ private:
         PROFILING_SCOPED_TIMER_CUSTOM("Solve with velocity mass matrix");
         PROFILING_SCOPED_TIMER_CUSTOM("Conjugate Gradient");
 #ifdef GPU_CONJUGATE_GRADIENT
-        RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+		RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
             GPUSimulation::GPUSimulationDevice::velocityMass,
-            static_cast<real*>(velocityRhs),
-            static_cast<real*>(velocityIn),
-            static_cast<real*>(velocityOut),
+            velocityRhs,
+            velocityIn,
+            velocityOut,
             -1,
             eps
         ));
-        RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
+		RETURN_ON_ERROR_CODE(gpuDevice.conjugateGradient(
             GPUSimulation::GPUSimulationDevice::velocityMass,
-            static_cast<real*>(velocityRhs + nodesCount),
-            static_cast<real*>(velocityIn + nodesCount),
-            static_cast<real*>(velocityOut + nodesCount),
+            velocityRhs + nodesCount,
+            velocityIn + nodesCount,
+            velocityOut + nodesCount,
             -1,
             eps
         ));
@@ -887,7 +896,13 @@ EC::ErrorCode NavierStokesAssembly<VelocityShape, PressureShape>::init(
     if(!simJson["mesh_path"].is_string()) {
         return EC::ErrorCode(2, "Missing path to mesh.");
     } else {
-        EC::ErrorCode error = grid.loadJSON(simJson["mesh_path"].get_ptr<std::string*>()->c_str());
+		std::filesystem::path meshPath(*(simJson["mesh_path"].get_ptr<std::string*>()));
+		if (meshPath.is_relative()) {
+			std::filesystem::path base =
+				std::filesystem::path(simDescriptionPath).parent_path();
+			meshPath = std::filesystem::canonical(base / meshPath);
+        }
+        EC::ErrorCode error = grid.loadJSON(meshPath.string().c_str());
         if(error.hasError()) {
             return error;
         }

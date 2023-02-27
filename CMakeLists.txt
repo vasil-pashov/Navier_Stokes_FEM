@@ -35,6 +35,10 @@ set(WITH_PROFILING_SCOPED_TIMERS
 	OFF CACHE BOOL
 	"If ON all scoped timers will be enabled and will print their result on the console")
 
+option(WITH_GPU_SOLVER
+	"If true the solution of the NS equations (advection, diffusion and pressure projection) will be performend on the GPU"
+	OFF)
+
 set(PTX_SOURCE_FOLDER "${PROJECT_BINARY_DIR}/ptx")
 
 if(${WITH_ADDRESS_SANITIZER})
@@ -141,6 +145,16 @@ endif()
 
 if(${WITH_PROFILING_SCOPED_TIMERS})
 	target_compile_definitions(${PROJECT_NAME} PRIVATE WITH_PROFILING_SCOPED_TIMERS)
+endif()
+
+if(${WITH_GPU_SOLVER})
+	target_compile_definitions(
+		${PROJECT_NAME}
+		PRIVATE
+			-DGPU_SETUP
+			-DGPU_ADVECTION
+			-DGPU_CONJUGATE_GRADIENT
+	)
 endif()
 
 add_subdirectory(sparse_matrix_math)
