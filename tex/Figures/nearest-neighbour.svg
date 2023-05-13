@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="255 4 362 624" xmlns:latexdraw="http://latexdraw.sourceforge.net/namespaces/latexdraw" version="1.1" baseProfile="full">
+    <g>
+        <g latexdraw:type="joinedLines" id="id341969363">
+            <polyline points="486.0,24.0 487.0,608.0 " stroke="black" stroke-width="2.0" fill="none" latexdraw:rotationAngle="0.0"/>
+        </g>
+        <g latexdraw:type="triangle" id="id1548960558" latexdraw:points="275.0 265.0 380.0 265.0 380.0 349.0 275.0 349.0">
+            <polygon points="327.5,266.8867962264113 378.3992189406418,348.0 276.6007810593582,348.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="triangle" id="id1269883367" latexdraw:points="499.0 206.0 597.0 206.0 597.0 288.0 499.0 288.0">
+            <polygon points="548.0,207.94948705862683 595.441694356589,287.0 500.5583056434111,287.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="dot" id="id1175872645" latexdraw:size="10.0" latexdraw:dotShape="*" latexdraw:position="456.0 268.0">
+            <ellipse cx="456.0" cy="268.0" rx="4.615384615384615" ry="4.615384615384615" stroke-width="0.625" stroke-linecap="square" stroke="black" fill="black"/>
+        </g>
+    </g>
+    <defs/>
+    <metadata>
+        <latexdraw:metadata>
+            <latexdraw:centreHoriz>false</latexdraw:centreHoriz>
+            <latexdraw:positionVert/>
+            <latexdraw:zoom>1.0</latexdraw:zoom>
+            <latexdraw:vpx>0.5</latexdraw:vpx>
+            <latexdraw:vpy>0.4</latexdraw:vpy>
+        </latexdraw:metadata>
+    </metadata>
+</svg>

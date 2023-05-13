@@ -1,0 +1,31 @@
+\chapter{Implementation of CUDA grid sync}\label[appendix]{ch:grid-sync}
+
+\lstdefinestyle{customc}{
+  belowcaptionskip=1\baselineskip,
+  breaklines=true,
+  xleftmargin=\parindent,
+  language=C++,
+  showstringspaces=false,
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\bfseries\color{green!40!black},
+  commentstyle=\itshape\color{purple!40!black},
+  identifierstyle=\color{blue},
+  stringstyle=\color{orange},
+}
+
+\lstset{escapechar=@,style=customc}
+
+\begin{lstlisting}[caption=Custom CUDA grid synchronization,captionpos=b]
+void __device__ syncGrid(unsigned int* barrier, unsigned int* generation) {
+  if(threadIdx.x == 0) {
+    volatile const unsigned int myGeneration = *generation;
+    const unsigned int oldCount = atomicInc(barrier, gridDim.x - 1);
+    if(oldCount == gridDim.x - 1) {
+      atomicAdd(generation, 1);
+    }
+    while(atomicCAS(generation, myGeneration, myGeneration) == myGeneration);
+  }
+  __syncthreads();
+}
+\end{lstlisting}
+The parameter barrier is a handle to the synchronization primitive, it must reside in the global memory. There can be multiple barriers. Parameter generation is used in order to distinguish threads which are waiting on the barrier and others which have left it and entered it again. It is safe if generation wraps around to 0. The \textit{atomicCAS} operation is needed in order to prevent the compiler from optimizing the while loop away.

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="179 33 558 558" xmlns:latexdraw="http://latexdraw.sourceforge.net/namespaces/latexdraw" version="1.1" baseProfile="full">
+    <g>
+        <g latexdraw:type="square" id="id1111081549">
+            <rect x="200.0" y="54.0" width="172.0" height="172.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="square" id="id1361258486">
+            <rect x="372.0" y="54.0" width="172.0" height="172.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="square" id="id1280763526">
+            <rect x="544.0" y="54.0" width="172.0" height="172.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="square" id="id1429669610">
+            <rect x="200.0" y="226.0" width="172.0" height="172.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="square" id="id988686550">
+            <rect x="372.0" y="226.0" width="172.0" height="172.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="square" id="id449674583">
+            <rect x="544.0" y="226.0" width="172.0" height="172.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="square" id="id1417812910">
+            <rect x="200.0" y="398.0" width="172.0" height="172.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="square" id="id1140335094">
+            <rect x="372.0" y="398.0" width="172.0" height="172.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="square" id="id1046343017">
+            <rect x="544.0" y="398.0" width="172.0" height="172.0" latexdraw:borderPos="outer" stroke="black" stroke-width="2.0" fill="none"/>
+        </g>
+        <g latexdraw:type="text" id="id1397955153" fill="black" latexdraw:position="bl">
+            <text x="424.0" y="323.0">\Huge$e_{i,j}$</text>
+        </g>
+        <g latexdraw:type="text" id="id754902954" fill="black" latexdraw:position="bl">
+            <text x="406.0" y="154.0">\Huge$e_{i+1,j}$</text>
+        </g>
+        <g latexdraw:type="text" id="id64450122" fill="black" latexdraw:position="bl">
+            <text x="405.0" y="502.0">\Huge$e_{i-1,j}$</text>
+        </g>
+        <g latexdraw:type="text" id="id669512065" fill="black" latexdraw:position="bl">
+            <text x="228.0" y="323.0">\Huge$e_{i,j-1}$</text>
+        </g>
+        <g latexdraw:type="text" id="id952198788" fill="black" latexdraw:position="bl">
+            <text x="574.0" y="322.0">\Huge$e_{i,j+1}$</text>
+        </g>
+    </g>
+    <defs/>
+    <metadata>
+        <latexdraw:metadata>
+            <latexdraw:centreHoriz>false</latexdraw:centreHoriz>
+            <latexdraw:positionVert/>
+            <latexdraw:zoom>1.0</latexdraw:zoom>
+            <latexdraw:vpx>0.496</latexdraw:vpx>
+            <latexdraw:vpy>0.4</latexdraw:vpy>
+        </latexdraw:metadata>
+    </metadata>
+</svg>
