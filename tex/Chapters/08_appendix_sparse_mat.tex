@@ -1,0 +1,545 @@
+\chapter{Sparse matrix formats and algorithms}\label[appendix]{ch:sparse_matrix_and_alg}
+This chapter shall introduce some of the most common sparse matrix formats and their properties. Algorithms for operations such as sparse vector matrix products and solving systems of linear equations will also be presented. We assume zero-based arrays are used.
+\section{Sparse matrix formats}
+Square dense matrix with $n$ rows occupies $O(n^2)$ memory. If most of the entries in the matrix are zero, a considerable amount of memory could be saved. Let us denote the number of rows in a matrix with $m$, the number of columns with $n$, and the number of nonzero entries with $nnz$. We shall assume that $nnz << m * n$. For illustration purposes of the presented sparse storage schemes we shall use the following matrix:
+$$
+\begin{bmatrix}
+	1 & 0 & 0 & 2 & 0\\
+	0 & 0 & 3 & 4 & 0\\
+	0 & 0 & 5 & 0 & 6\\
+	0 & 0 & 0 & 0 & 0\\
+	7 & 0 & 8 & 9 & 0
+\end{bmatrix}
+$$
+where $m=4$, $n=4$, $nnz=5$
+\section{Triplet (Coordinate) format}
+This format uses 3 arrays of length $nnz$ one real array containing the nonzero entries of the matrix, one integer array containing row indexes of the nonzero entries and one integer array containing the column indexes of the nonzero entries. An illustration of this scheme applied to the example matrix:
+
+\begin{table}[H]
+	\centering
+	\begin{tabular}{l|ccccccccc|}
+		\cline{2-10}
+		\textit{NZ}  & 9 & 1 & 3 & 4 & 2 & 5 & 6 & 7 & 8 \\ \cline{2-10}
+		\textit{Row} & 4 & 0 & 1 & 1 & 0 & 2 & 2 & 4 & 4 \\ \cline{2-10}
+		\textit{Col} & 3 & 0 & 2 & 3 & 3 & 2 & 4 & 0 & 2 \\ \cline{2-10}
+	\end{tabular}
+\end{table}
+
+Space needed to store a matrix in triplet format is $O(3*nnz)$. This format is very flexible as it does not impose any particular ordering on the entries, nor does it require knowing the matrix dimensions and number of nonzero entries in advance. Adding a new nonzero entry would require $O(1)$ computational, deleting elements takes $O(nnz)$. These properties make it useful for storing matrices resulting from the assembly procedure of the FEM. Some authors \cite{davis-sparse} allow having repeating elements (elements with the same row and column). The implementation provided with this thesis, does not allow repeating elements. An entry is stored only once and if another entry with the same row and column is added their values are summed.
+
+The flexibility of this format makes it easy to understand and implement, but it also makes it difficult to use in most solvers for sparse linear systems.
+
+\section{Compressed Sparse Column Format}
+Compressed Sparse Column (CSC), is format analogous to the CSR format. The difference is that the entries in the matrix are ordered by increasing column index, instead of by increasing row index. Space needed to store matrix in CSC format is $O(2*nnz + m)$. An illustration of this scheme applied to the example matrix:
+
+The number of nonzero elements in column $i$ can be found by $Start[i+1] - Start[i]$, the format allows for having empty columns, then $Start[i+1] - Start[i] = 0$. To find the next column with nonzero entries one shall iterate to find the first $i$ for which the $Start[i+1] - Start[i] \neq 0$.
+
+\begin{table}[h]
+	\centering
+	\begin{tabular}{l|ccccccccc}
+		\cline{2-10}
+		\textit{NZ}    & 7 & 1 & 5 & 3 & 8 & 2                      & 4 & 9 & \multicolumn{1}{c|}{6} \\ \cline{2-10}
+		\textit{Pos}   & 4 & 0 & 2 & 1 & 4 & 0                      & 1 & 4 & \multicolumn{1}{c|}{2} \\ \cline{2-10}
+		\textit{Start} & 0 & 2 & 2 & 5 & 8 & \multicolumn{1}{c|}{9} &   &   &                        \\ \cline{2-7}
+	\end{tabular}
+\end{table}
+
+\section{Matrix Vector Product}
+As the vector matrix product is the most computationally heavy operation in an iterative system solver, we shall dedicate a separate section to it. We shall give a detailed presentation of the case when the vector is on the right hand side of the matrix.
+
+Usually the matrix vector product is implemented to compute $Ax + y$ with the result overwriting $y$ \footnote{This operation is most commonly referred as \textit{gaxpy} in the literature. We, however, shall use the more descriptive \textit{rMultAdd}} instead of only $Ax$. One of the reasons is that this way the matrix vector multiplication and the addition can be executed in the same loop, versus having one loop for the multiplication and one for the addition. Another reason is that most of the iterative algorithms for solving linear systems use $Ax + y$.
+
+In order to examine the properties of matrix vector multiplication for matrices in CSR and CSC formats, in parallel environment, we need to define what a \textit{data race\footnote{The provided definition is almost the same as the definition adopted by the C++ programming language standard \cite{ISO:2017:IIIa}, with the difference that we have omitted some language specific details.}} is.
+
+\begin{definition}[Data Race]
+When an evaluation of an expression writes to a memory location and another evaluation reads or modifies the same memory location, the expressions are said to conflict. A program that has two conflicting evaluations has a data race.
+\end{definition}
+
+First let us note that data race cannot happen in a single threaded environment as the program flow linear and there is no way for two operations to happen simultaneously.\footnote{In reality, even in single threaded environment, operations are evaluated with some dose of parallelism, as processors have several computing units, provide pipelining, etc. Those operations are done internally by the processor and are out of the hands of the programmer.} Next for a data race to happen there \textit{must} be at least one writing operation. Many different threads are allowed to read the same memory location without having a data race if there is no one writing to the same memory location. In most programming languages data races lead to undefined behavior and unpredictable results, unless some synchronization mechanism is provided. Let us demonstrate this with an example. Consider the following multithreaded code.
+\begin{lstlisting}[caption=Common section,frame=tlrb, mathescape=true]{Name}
+$shared \gets 0$
+\end{lstlisting}
+\noindent\begin{minipage}{.45\textwidth}
+\begin{lstlisting}[caption=Thread 1,frame=tlrb, mathescape=true]{Name}
+$shared \gets shared + 5$
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.45\textwidth}
+\begin{lstlisting}[caption=Thread 2,frame=tlrb, mathescape=true]{Name}
+$local2 \gets shared$
+\end{lstlisting}
+\end{minipage}
+
+First the common section is executed, it initializes a variable which is shared between two threads. The two threads then start executing simultaneously. The data race occurs on line one of both threads. \textit{Thread 1} updates the value of the shared variable, while \textit{Thread 2} reads from the shared variable. Without any additional synchronization the value of \textit{local1} will vary on each execution. If \textit{line 1} of \textit{Thread 1} executes before \textit{line 1} of \textit{Thread 2}, the value of \textit{local1} will be 5, otherwise it will be 0.
+
+\subsubsection{Matrix Vector Product With Matrix in CSR Format}
+
+\begin{algorithm}[H]
+ \centering
+ \caption{Vector Matrix Multiplication with Matrix in CSR Format}\label{CSR_Alg}
+ \begin{algorithmic}[1]
+		\Procedure{rMultAdd}{$A, x, y$}
+			\For{$row \gets 0$ to $m - 1$}
+				\For{$k \gets A.Start[row]$ to $A.Start[row+1]$}
+					\State {$col \gets A.Pos[k]$}
+					\State {$y[row] = A.NZ[k] * y[col] + y[row]$}
+				\EndFor
+			\EndFor
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+The outer loop here is trivially parallelizable. Suppose we are given $p_1, p_2, \dots p_p$ processing units, and variables $A, x, y$ are shared between them. We can split the work between them so that the $p_1$ will execute iterations for $row \in [0;\frac{m-1}{p})$ of the outer loop, $p_2$ will execute iterations for $row \in [\frac{m-1}{p};2*\frac{m-1}{p})$ and so on. Let us now observe \textit{line 5} of the above algorithm. This is the only line where writing to shared memory could happen and thus the only place where data race can occur. Given the above work partitioning it is obvious that exactly one processor will read or write to $y[row]$, as disjoint sets of rows are assigned to the processors.
+\subsubsection{Matrix Vector Product With Matrix in CSC Format}
+
+\begin{algorithm}[H]
+ \centering
+ \caption{Vector Matrix Multiplication with Matrix in CSC Format}\label{CSC_Alg}
+ \begin{algorithmic}[1]
+		\Procedure{rMultAdd}{$A, x, y$}
+			\For{$col \gets 0$ to $n - 1$}
+				\For{$k \gets A.Start[col]$ to $A.Start[col+1]$}
+					\State {$row \gets A.Pos[k]$}
+					\State {$y[row] = A.NZ[k] * y[col] + y[row]$}
+				\EndFor
+			\EndFor
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+The difference between \cref{CSR_Alg} and \cref{CSC_Alg} is subtle. The outer loop for \cref{CSC_Alg} is not trivially parallelizable. Let us show why. If we proceed as in \cref{CSR_Alg} we can split the work done by the outer loop by assigning $p_1$ operations for $col \in [0;\frac{n-1}{p})$, $p_2$ operations for $col \in [\frac{n-1}{p}, 2*\frac{n-1}{p})$ and so on. This time, however, rows assigned to each processor are not disjoint, thus when \textit{line 5} is being executed by two different processors and the columns assigned to this processor have intersecting sets of rows, data race can occur.
+
+There is a remedy for this situation. We can allocate $p$ column vectors $y_1, y_2, \dots y_p$ for each processing unit and have the result for \textit{line 5} written in the local vector. Then after all processing units complete their work, we shall have the result by summing $y_1, y_2, \dots y_p$.
+
+\section{Brief Overview of Existing Iterative Algorithms}
+Here we shall give a short description of some existing methods for solving systems of linear equations with general, square real, sparse matrices. The methods that were explored belong to the Krylov subspace family of methods.
+
+\begin{definition}[Krylov Subspace]
+Given a matrix $A \in \mathbb{R}^{n \times n}$ and a vector $z \in \mathbb{R}^n$ we define the Krylov subspace with respect to $A$ and $z$ as $\mathcal{K}_m(A, z) = span\{z, Az,A^2z, \dots, A^{m-1}z\}$
+\end{definition}
+
+Krylov methods seek the approximate solution at the $m$-th iteration $x_m$, of the linear system $Ax = b$, in the $m$-th Krylov subspace with respect to the matrix $A$ and some arbitrary vector $z$, i.e. $x_m \in \mathcal{K}_m(A, z) = span\{z, Az,A^2z, \dots, A^{m-1}z\}$. It is also possible to seek the solution at step m in affine space, for example $x_m \in x_0 + \mathcal{K}_m(A, z)$. Some common choices for the vector $z$ are the right hand side of $Ax = b$ or the residual $r_0 = b - Ax_0$, the following proposition shows why.
+
+\begin{proposition}Assume that the matrix $A$ is nonsingular and at step $m$ of solving $Ax = b$ vectors $b, Ab, \dots, A^{m-1}b$ are linearly independent. If $A^{m}b \in span\{b, Ab, \dots A^{m-1}b\}$, then the solution $x \in span\{b, Ab, \dots A^{m-1}b\}$.
+\end{proposition}
+
+\begin{proof}
+If $A^{m}b \in span\{b, Ab, \dots, A^{m-1}b\}$, then we can write it as
+\begin{equation}\label{eq:Krylov_linear_comb}
+	A^{m}b = c_0b + c_1Ab + \cdots + c_{m-1}A^{m-1}b
+\end{equation}
+Now we can multiply both sides of \cref{eq:Krylov_linear_comb} with $A^{-1}$
+
+\begin{align*}
+	A^{m - 1}b &= c_0A^{-1}b + c_1b + \cdots + c_{m-1}A^{m-2}b \\
+	A^{-1}b &= \frac{1}{c_0}(c_1b + \cdots + c_{m-1}A^{m-2}b - A^{m - 1}b)
+\end{align*}
+
+\end{proof}
+
+Advanced iterative Krylov methods which were considered are based on Arnoldi's method and Lanczos biorthogonalization method. We
+shall present them in pairs. Generalized Minimal Residual (GMRES) method is based on Arnoldi's method and we shall be presented first. BiConjugate Gradient (BiCG) method and its derivatives Conjugate Gradient Squared (CGS) method and BiConjugate Gradient Stabilized (BiCGStab) method are based on Lanczos biorthogonalization and will be presented second.
+
+\subsection{Arnoldi's method}
+Arnoldi's method is modification on Gram--Schmidt orthogonalization which produces an orthonormal basis for $\mathcal{K}_m(A, z)$. The procedure takes as input the matrix $A$ and a vector $v_1$ such that $\norm{v_1}_2 = 1$
+\begin{algorithm}[H]
+ \centering
+ \caption{Arnoldi method}\label{alg:Arnoldi}
+ \begin{algorithmic}[1]
+		\Procedure{Arnoldi}{$A, v_1, m$}
+			\For{$j \gets 2$ to $m$}
+				\State $v_j \gets Av_{j-1}$
+				\For{$i \gets 1$ to $j-1$}
+					\State $h_{i,j-1} \gets \dotprod{v_i}{v_j}$
+					\State $v_j \gets v_j - h_{i,j-1} v_i$
+				\EndFor
+				\State $h_{j,j-1} \gets \norm{q_j}_2$
+				\State $q_j \gets \frac{q_j}{h_{j,j-1}}$\label{algln:Arnoldi_breakdown}
+			\EndFor
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+\begin{proposition}The coefficients $h_{i,j}$ generated by \cref{alg:Arnoldi} generate $(m+1) \times m$ upper Hessenberg matrix $\overline{H}_m$. Let us denote with $H_m$ the $m \times m$ matrix obtained by removing the last line from $\overline{H}_m$ and with $V_m$ the matrix with columns $v_1, v_2, \dots, v_m$. The following is true.
+
+	\begin{align}
+		V^T_mAV_m &= H_m \label{eq:Arnoldi_Hessenberg} \\
+		AV_m &= V_{m+1}\overline{H}_m \label{eq:Arnoldi_Hessenberg_m+1}
+	\end{align}
+\end{proposition}
+
+With a minor tweak we can use the Arnoldi method for solving $Ax=b$. We shall seek the approximate solution in the affine space $x_0 + \mathcal{K}_m(A, r_0)$. Choosing this space guarantees that if a breakdown happens on \textit{line} \cref{algln:Arnoldi_breakdown} of \cref{alg:Arnoldi} for $j < m$ then the solution will be in $x_0 + \mathcal{K}_{j}(A, r_0)$. Another reason is that $r_0 \in \mathcal{K}_{j}(A, r_0)$ which makes $V^Tr_0 = V^T(\norm{r_0}_2v_1) = \norm{r_0}_2e_1$ trivial to compute. The algorithm for solving $Ax = b$ is based \cref{eq:Arnoldi_Hessenberg}. Let us denote:
+
+\begin{equation}\label{eq:Arnoldi_solve_xvy}
+	x = V_my
+\end{equation}
+
+\begin{align}
+	Ax &= b \\
+	V^T_mAV_my &= V^T_mb \\
+	H_my &= V^T_mb \\
+	H^T_my &= V^T_m(Ax_0 + r_0) \\
+	y &= V^T_mx_0 + H^{-1}_mV^Tr_0 \\
+	y &= V^T_mx_0 + H^{-1}_m\norm{r_0}_2e_1
+\end{align}
+Now from \cref{eq:Arnoldi_solve_xvy}:
+
+\begin{align}
+	x &= V_m(V^T_mx_0 + H^{-1}_m\norm{r_0}_2e_1) \\
+	x &= x_0 + V_m(H^{-1}_m\norm{r_0}_2e_1)
+\end{align}
+
+Modification of \cref{alg:Arnoldi} called \textit{Incomplete Orthogonalization Method} is obtained by changing \textit{line 4}. Instead of doing orthogonalization against all vectors, we choose some constant number $k$ and perform partial orthogonalization. The number $k$ can be selected to satisfy memory limitations.
+
+\begin{algorithm}[H]
+ \centering
+ \caption{Incomplete Orthogonalization}\label{alg:Incomplete_Orthogonalization}
+ \begin{algorithmic}[1]
+		\Procedure{IOM}{$A, v_1, m$}
+			\For{$j \gets 2$ to $m$}
+				\State $v_j \gets Av_{j-1}$
+				\For{$i \gets 1$ to $\max(j-1, k)$}
+					\State $h_{i,j-1} \gets v_i \cdot v_j$
+					\State $v_j \gets v_j - h_{i,j-1} v_i$
+				\EndFor
+				\State $h_{j,j-1} \gets \norm{q_j}_2$
+				\State $q_j \gets \frac{q_j}{h_{j,j-1}}$
+			\EndFor
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+\subsection{Generalized Minimal Residual (GMRES)}
+GMRES is one of the most popular and robust iterative methods for solving linear systems. It is a combination of the Least Squares method and Arnoldi. We shall seek the solution in $x_0 + \mathcal{K}_{m}(A, r_0)$ and at each iteration the algorithm finds an approximate solution such that the residual will be minimal in the Krylov affine space.
+\begin{equation}\label{eq:GMRES_basic}
+	x_m = \argmin_{x \in x_0 + \mathcal{K}_{m}(A, r_0)} \norm{b - Ax}_2
+\end{equation}
+Now given relation \cref{eq:Arnoldi_Hessenberg_m+1} and the fact that we can represent every member of $x_0 + \mathcal{K}_{m}(A, r_0)$ as $x_0 + V_my$ where $y \in \mathbb{R}^m$ we can express the residual the following way:
+
+\begin{align}
+	b - Ax &= b - A(x_0 + V_my) \\
+	       &= r_0 - AV_my \\
+	       &= \norm{r_0}_2v_1 - V_{m+1}\overline{H}_my \\
+	       &= V_{m+1}(\norm{r_0}_2e_1 - \overline{H}_my)
+\end{align}
+Given that $V_{m+1}$ is orthonormal matrix, we can write the residual norm this way:
+
+\begin{equation}
+	\norm{b - Ax}_2 = \norm{\norm{r_0}_2e_1 - \overline{H}_my}_2
+\end{equation}
+We can now formulate the GMRES method
+
+\begin{algorithm}[H]
+ \centering
+ \caption{GMRES}\label{alg:GMRES}
+ \begin{algorithmic}[1]
+		\Procedure{GMRES}{$A, b, x_0$}
+			\State $r_0 \gets b - Ax_0$
+			\State $v_1 \gets \frac{r_0}{\norm{r_0}_2}$
+			\State Generate $V_{m+1}$ and $\overline{H}_m$ using Arnoldi
+			\State Solve Least Squares problem: $y_m \gets \argmin_{y}\norm{\norm{r_0}_2e_1 - \overline{H}_my}_2$
+			\State $x_m \gets x_0 + V_my_m$
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+The only possible breakdown of the algorithm can happen in the Arnoldi procedure. It can be shown \cite{saad-sparse} that if such breakdown occurs, the algorithm has found the exact answer.
+
+The algorithm uses long recurrences i.e. we need to store the Arnoldi basis (and the Hessenberg matrix) in order to perform the orthogonalization. This makes the algorithm more demanding in terms of memory compared to 3 term recurrence alternatives which will be presented later, but it can be shown that there is no short term recurrence method for general matrices, which minimizes the norm of the residual, as GMRES does.
+
+There are various alternatives of the method. Restarted GMRES can decrease memory used to store the basis vectors by restarting the method after some predefined number of steps. Truncated GMRES is similar to IOM and can decrease the number of computations, but does not minimize the norm of the residual.
+
+In case $A$ is symmetric we can use Lanczos orthogonalization instead of Arnoldi Method to generate the basis and the Hessenberg matrix. It can be shown that for symmetric matrices the Hessenberg matrix is symmetric tridiagonal and the orthogonalization becomes 3 term recurrence. The short recurrence, however, saves only computations not space as we need the basis vectors in order to find the approximate solution.
+
+\subsection{Lanczos Biorthogonalization}
+This algorithm creates two sets of biorthogonal basis vectors $v_1, v_2, \dots, v_m$ and $w_1, w_2, \dots, w_m$ such that:
+\begin{align}
+	span\{v_i\}^m_{i=1} &= \mathcal{K}_m(A, v_1) = span\left\{v_1, Av_1, \dots, A^{m-1}v_1\right\}\\
+	span\{w_i\}^m_{i=1} &= \mathcal{K}_m(A^T, w_1) = span\left\{v_1, A^Tw_1, \dots, (A^T)^{m-1}w_1\right\} \\
+	(v_i, w_j) &= \delta_{ij}
+\end{align}
+The algorithm is similar to Arnoldi. It can be shown \cite{saad-sparse} that for these particular sets of spaces the recurrence which provides biorthogonality is a three term recurrence. This is because the two Krylov spaces are generated by matrices which are transpose of one another.
+
+In the following procedure the two input vectors $v_1$ and $w_1$ must satisfy $(v_1, w_1) = 1$.
+
+\begin{algorithm}[H]
+ \centering
+ \caption{Lanczos Biorthogonalization}\label{alg:BiLanczos}
+ \begin{algorithmic}[1]
+		\Procedure{BiLanczos}{$A, b, v_1, w_1$}
+			\State $\beta_1 \gets 0, \delta_1 \gets 0, w_0 \gets 0, v_0 \gets 0$
+			\For{$j \gets 1$ to $m$}
+				\State $\alpha_j \gets (Av_j, w_j)$
+				\State $\hat{v}_{j+1} \gets Av_j - \alpha_j v_j - \beta_jv_{j-1}$
+				\State $\hat{w}_{j+1} \gets A^Tw_j - \alpha_j w_j - \delta_j w_{j-1}$
+				\State $\delta_{j+1} \gets \sqrt{\vert(\hat{v}_{j+1}, \hat{w}_{j+1})\vert}$
+				\If{$\delta_{j+1} = 0$}
+					\State return error
+				\EndIf
+				\State $\beta_{j+1} \gets \frac{(\hat{v}_{j+1}, \hat{w}_{j+1})}{\delta_{j+1}}$
+				\State $w_{j+1} \gets \frac{\hat{w}_{j+1}}{\beta{j+1}}$
+				\State $v_{j+1} \gets \frac{\hat{v}_{j+1}}{\delta{j+1}}$
+			\EndFor
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+Let us now form two matrices $V$ such that its columns are $v_1, v_2, \dots, v_m$ and $W$ such that its columns are $w_1, w_2, \dots, w_m$. Let us also define the tridiagonal matrix $T_m$ holding the coefficients $\alpha_i, \beta_i, \delta_i$ computed by the algorithm
+\begin{equation*}
+	T_m = \begin{bmatrix}
+	\alpha_1 & \beta_2 & & &\\
+	\delta_2 & \alpha_2 & \beta_3 & & \\
+	\multicolumn{5}{c}{\dots}     \\
+	& & \delta_{m-1} & \alpha_{m-1} & \beta_m \\
+	& & & \delta_m & \alpha_m
+	\end{bmatrix}
+\end{equation*}
+\begin{proposition}\label{prop:BiLanczosTm}
+It can be shown \cite{saad-sparse} that the following is true:
+	\begin{align}
+		AV_m &= V_mT_m + \delta_{m+1}v_{m+1}e^T_m \\
+		A^TW_m &= W_mT^T_m + \beta_{m+1}w_{m+1}e^T_m \\
+		W^T_mAV_m &= T_m
+	\end{align}
+\end{proposition}
+Now given \cref{prop:BiLanczosTm}, an algorithm for solving linear systems can be derived. Given initial guess $x_0$:
+\begin{align*}
+	Ax &= b \\
+	W^T_mAx &= W^T_mb \\
+	W^T_mAV_mz &= W^T_mb \\
+	T_mz &= W^T_mb \\
+	T_mz &= W^T_m(Ax_0 + r_0) \\
+	T_mz &= W^T_mAx_0 + \norm{r_0}_2e_1 \\
+	z &= W^T_mx_0 + \norm{r_0}_2 T^{-1}_m e_1	
+\end{align*}
+Now define:
+\begin{equation}
+	y = \norm{r_0}_2 T^{-1}_m e_1
+\end{equation}
+The approximate solution is given by:
+\begin{equation}
+	x_m = V_mz = x_0 + V_my
+\end{equation}
+
+\begin{algorithm}[H]
+ \centering
+ \caption{Lanczos Biorthogonalization For Linear Systems}\label{alg:BiLanczosLinearSystem}
+ \begin{algorithmic}[1]
+		\Procedure{BiLanczosLinearSystem}{$A, b, x_0$}
+			\State $r_0 \gets b - Ax_0$
+			\State $v_1 \gets \frac{r_0}{\norm{r_0}_2}$
+			\State Choose $w_1$ such that $(v_1, w_1) = 1$
+			\State Run m steps of \cref{alg:BiLanczos} and generate matrices $V_m, W_m, T_m$
+			\State $y_m \gets \norm{r_0}_2T^{-1}_me_1$
+			\State $x_m \gets x_0 + V_my$
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+It is known that \cref{alg:BiLanczosLinearSystem} can fail to find a solution of the linear system as it depends on \cref{alg:BiLanczos}. It is obvious from the given pseudocode that if $\delta_{j+1} = 0$ \cref{alg:BiLanczos} terminates. There are 3 possibilities: $\hat{v}_{j+1}$ vanishes - this is also known as lucky breakdown in this case \cref{alg:BiLanczosLinearSystem} will find the exact solution. The other 2 possibilites are if $\hat{w}_{j+1}$ vanishes or $(\hat{v}_{j+1}, \hat{w}_{j+1}) = 0$ but none of the vectors is the zero vector. Nothing can be said about the approximate solution in these two cases.
+
+Look-ahead Lanczos algorithms provide options to continue the procedure even if serious breakdown occurs. These methods however add non-negligible complexity to the procedure. The matrix $T_m$ ceases to be tridiagonal. In the context of solving linear systems breakdowns and near breakdowns are rare and it is more appropriate to deal with them by restarting the method. In the context of finding eigenvalues, Look-ahead Lanczos algorithms can be more appropriate.
+
+\subsection{BiConjuate Gradient Method}
+Lanczos Biorthogonal method for linear systems has an advantage over Arnoldi and GMRES in terms of computations needed as the recurrence used when generating $V_m, W_m, T_m$ has three terms. In terms of required memory, however, the method does not have any advantage as matrices $V_m$ and $T_m$ have to be stored.
+
+The BiConjugate Gradient method is derived from \cref{prop:BiLanczosTm} by using the biorthogonality between the two sets of basis vectors. It yields the same result as \cref{alg:BiLanczosLinearSystem} but the approximate solution $x_{m+1}$ is updatable from $x_m$ and the vectors included in the three term recurrence. This lifts the requirement to keep $V_m$ and $T_m$ explicitly in memory.
+
+\begin{algorithm}[H]
+ \centering
+ \caption{BiConjugate Gradient Method}\label{alg:BiCG}
+ \begin{algorithmic}[1]
+		\Procedure{BiCG}{$A, b, x_0$}
+			\State $r_0 \gets b - Ax_0$
+			\State Choose $r^*_0$ such that $(r_0, r^*_0)$
+			\State $p_0 \gets r_0, p^*_0 \gets r^*_0$
+			\For{$j \gets 0, 1, \dots$ until convergence}
+				\State $\alpha_j \gets \frac{(r_j, r^*_j)}{(Ap_j, p^*_j)}$ \label{algln:BiCG_Breakdown1}
+				\State $x_{j+1} \gets x_j + \alpha_j p_j$
+				\State $r_{j+1} \gets r_j - \alpha_j Ap_j$
+				\State $r^*_{j+1} \gets r^*_j - \alpha_j A^T p^*_j$
+				\State $\beta_j \gets \frac{(r_{j+1}, r^*_{j+1})}{(r_j, r^*_j)}$ \label{algln:BiCG_Breakdown2}
+				\State $p_{j+1} \gets r_{j+1} + \beta_j p_j$
+				\State $p^*_{j+1} \gets r^*_{j+1} + \beta_j p^*_j$
+			\EndFor
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+The main advantages of the algorithm are low memory usage and short term recurrence. In theory we need to store only $A, x_m, p_m, r_m, x^*_m, p^*_m, r^*_m$. However in practice in order to perform efficient matrix vector products with $A^T$ we need to store it explicitly. The most computationally expensive parts are the two matrix vector products. It can be proven that for SPD matrices this algorithm is equivalent to the Conjugate Gradient. If the matrix $A$ is only symmetric, but not positive definite, we can discard all computations involving $A^T, x^*_m, p^*_m, r^*_m$ and the algorithm becomes the same as Conjugate Gradient, with the difference that $\dotprod{Ap_j}{p_j}$ does not define the inner product with respect to $A$. Thus the algorithm could have a serious breakdown. It is clear from the provided pseudo code that the algorithm can have 2 breakdowns: one on line \cref{algln:BiCG_Breakdown1} and one on line \cref{algln:BiCG_Breakdown2}. Nothing can be said about the approximate solution in these cases. The algorithm is usually restarted. There are different ways to check for convergence, but by far the most common is to check the $L_2$ norm of the residual $r_{j+1}$. Note also that the residual $r_{j+1}$ is not computed explicitly, but updated from the previous iteration. This means that when floating point arithmetics is used $r_{j+1}$ can diverge seriously from the exact residual, thus it is recommended to compute $b - Ax_{j+1}$ when convergence of $r_{j+1}$ is achieved.
+
+\subsection{Conjugate Gradient Squared}\label{sec:CGS}
+One of the main disadvantages of the BiConjugate Gradient method is the need to multiply (and store in memory) $A^T$. Conjugate Gradient Squared modifies BiCG in order to avoid any computations involving $A^T$. We shall present the main idea briefly. Full derivation of the method can be found in \cite{saad-sparse}. Note that $A^T, x^*_m, p^*_m, r^*_m$ are not directly used to update $x_m$ ot $x_{m+1}$. They are used only when coefficients $\alpha$ and $\beta$ are computed.
+
+We can express $r_j$ and $p_j$ in polynomial form:
+\begin{align}
+	r_j &= \phi_j(A)r_0 \\
+	p_j &= \pi_j(A)r_0
+\end{align}
+Vectors $r^*_j$ and $p^*_j$ are defined via the same recurrence as $r_j$ and $p_j$ thus they can be defined via polynomials which have the same coefficients as $\phi$ and $\pi$.
+
+\begin{align}
+	r^*_j &= \phi_j(A^T)r_0 \\
+	p^*_j &= \pi_j(A^T)r_0
+\end{align}
+For $\alpha_{j}$ we have:
+
+\begin{equation}
+\alpha_j = \frac{\dotprod{\phi_j(A)r_0}{\phi_j(A^T)r^*_0}}{\dotprod{A\pi_j(A)r_0}{\pi_j(A^T)r^*_0}} = \frac{\dotprod{\phi^2_j(A)r_0}{r^*_0}}{\dotprod{A\pi^2_j(A)r_0}{r^*_0}}
+\end{equation}
+Similar computation can be done for $\beta$. The idea of CGS is to find recurrence formulas which can be used to compute $\phi^2(A)r_0$ and $\pi^2(A)r_0$.
+
+\begin{algorithm}[H]
+ \centering
+ \caption{Conjugate Gradient Squared}\label{alg:CGC}
+ \begin{algorithmic}[1]
+		\Procedure{CGS}{$A, b, x_0$}
+			\State $r_0 \gets b - Ax_0$
+			\State $p_0 \gets r_0$
+			\State $u_0 \gets r_0$
+			\For{$j \gets 0, 1, \dots$ until convergence}
+				\State $\alpha_j \gets \frac{\dotprod{r_j}{r^*_0}}{\dotprod{Ap_j}{r^*_0}}$
+				\State $q_j \gets u_j - \alpha_j A p_j$
+				\State $x_{j+1} \gets x_j + \alpha_j(u_j + q_j)$
+				\State $r_{j+1} \gets r_j - \alpha_j A (u_j + q_j)$
+				\State $\beta_j \gets \frac{\dotprod{r_{j+1}}{r^*_0}}{\dotprod{r_j}{r^*_0}}$
+				\State $u_{j+1} \gets r_{j+1} + \beta_j q_j$
+				\State $p_{j+1} \gets u_{j+1} + \beta_j(q_j + \beta_j p_j)$
+			\EndFor
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+The main advantage of CGS over BiCG is that it does not require any multiplications by $A^T$. The number matrix vector products, however, are the same. In terms of convergence CGS usually converges twice as fast as BiCG. The main disadvantage is that squaring the polynomials makes the method susceptible to rounding errors.
+
+\subsection{BiConjugate Gradient Stabilized}
+BiConjugate Gradient Stabilized is another alternative of BiCG, which does not require multiplication by $A^T$. Its advantage over CGS is that it does not square the residuals and thus it is less susceptible to rounding errors. As with CGS we shall present only the main idea, while the full derivation of the method can be found in \cite{saad-sparse}.
+
+It is not needed to explicitly track the residual $r_j$. It can be computed implicitly, as long as this implicit computation assures that $\dotprod{r_i}{r^*_j} = \delta_{i,j}$. This is the main idea of BiCGStab. We want to generate recurrence for the pseudo residual vector and search direction:
+
+\begin{align}
+	r_j &= \psi(A)_j \phi(A)_j r_0 \\
+	p_j &= \psi(A)_j \pi(A)_j r_0
+\end{align}
+where $\phi(A)_jr_0$ and $\pi(A)_jr_0$ are the same polynomials as in \cref{sec:CGS}.The polynomial $\psi(A)_j$ is a special polynomial, designed to "smooth" the rounding errors and improve the convergence rate of the method. It is given by a simple recurrence:
+
+\begin{equation}
+	\psi(A)_{j+1} = (1 - \omega_j A)\psi_j(A)
+\end{equation}
+where $\omega_j$ is a free parameter. It is often chosen so that:
+
+\begin{equation}
+	\omega_j = \argmin \norm{r_{j+1}(\omega_j)}_2
+\end{equation}
+
+\begin{algorithm}[H]
+ \centering
+ \caption{BiConjugate Gradient Stabilized}\label{alg:BiCGStab}
+ \begin{algorithmic}[1]
+		\Procedure{BiCGStab}{$A, b, x_0$}
+			\State $r_0 \gets b - Ax_0$
+			\State $p_0 \gets r_0$
+			\For{$j \gets 0, 1, \dots$ until convergence}
+				\State $\alpha_j \gets \frac{\dotprod{r_j}{r^*_0}}{\dotprod{Ap_j}{r^*_0}}$
+				\State $s_j \gets r_j - \alpha_j A p_j$
+				\State $\omega_j \gets \frac{\dotprod{A s_j}{s_j}}{\dotprod{A s_j}{A s_j}}$
+				\State $x_{j+1} \gets x_j + \alpha_j p_j + \omega_j s_j$
+				\State $r_{j+1} \gets s_j - \omega_j A s_j$
+				\State $\beta_j \gets \frac{\dotprod{r_{j+1}}{r^*_0}}{\dotprod{r_j}{r^*_0}} \frac{\alpha_j}{\omega_j}$
+				\State $p_{j+1} \gets r_{j+1} + \beta_j(p_j - \omega_j A p_j)$
+			\EndFor
+		\EndProcedure
+ \end{algorithmic}
+\end{algorithm}
+
+BiCGStab often takes less iterations to converge than BiCG and is more stable than CGS.
+\subsection{Comparison}
+First it should be noted that none of the above iterative methods will work correctly for all kinds of linear systems.
+
+GMRES provides residuals with $L_2$ norms and all breakdowns of the method are the so called "lucky" breakdowns i.e. when a breakdown occurs, it means that the solution has been found. Its main disadvantage is that it needs a lot of memory. This makes it less appropriate for devices with less memory, such as graphics cards.
+
+BiCG has short recurrences and it requires to keep explicitly only the vectors from the previous step in order to compute the next one. The method solves two systems at the same time $Ax = b$ and $A^Tx^* = b^*$. It requires explicitly keeping the transpose of $A$. If there is no need to solve two systems at the same time all computations done with $A^T$ and the memory for it are wasted. The method is based on Lanczos Biorthogonalization and thus can have serious breakdown i.e. the procedure must stop, but nothing can be said about the approximation if this happens. This is cured by restarting the method. In the context of linear systems such breakdowns are less likely to occur, compared to when eigenvalue problems are solved.
+
+CGS modifies BiCG so that $A^T$ is not needed. It often converges two times faster than BiCG, but it is very susceptible to rounding errors, as the residuals are squared at each step. As with BiCG it can suffer from serious breakdowns.
+
+BiCGStab modifies BiCG so that $A^T$ is not needed. Its convergence rate is somewhere between BiCG and CGS. However it is less susceptible to rounding errors than CGS. As with BiCG it can suffer from serious breakdowns.
+
+\section{Preconditioning}
+The idea of preconditioning is to find a matrix $P^{-1}$ which is an approximation of $A^{-1}$. It should be easy to compute and if $A$ is sparse it is desirable for $P^{-1}$ to sparse. Using $P^{-1}$ we transform $Ax=b$ into an equivalent system whose matrix has a better condition number. There are three ways to do that.
+
+Apply $P^{-1}$ to the left of both sides
+\begin{equation}\label{eq:precond_left}
+	P^{-1}Ax = P^{-1}b
+\end{equation}
+
+Apply $P^{-1}$ to the right of $A$
+\begin{align}
+	AP^{-1}y &= b, \quad x = P^{-1}y
+\end{align}
+
+If $P^{-1}$ can be factorized into matrix product of two, usually, triangular matrices
+\begin{align}
+	P^{-1} &= P_R^{-1}P_L^{-1} \\
+	P_L^{-1}AP_R^{-1}y &= P_L^{-1}b, \quad x = P_R^{-1}y
+\end{align}
+
+In practice the choice of proper preconditioner turns out to be more important than the choice of which Krylov method will be used for solving the system.
+
+Next we shall present two simple preconditioning techniques.
+
+\subsection{Symmetric Gauss--Seidel Preconditioner}
+It can be shown \cite{saad-sparse} that given a matrix splitting of the form:
+\begin{equation}\label{eq:split_A_M-N}
+	A = M - N
+\end{equation}
+We can derive various iterative methods for solving $Ax = b$ all of which have the form
+\begin{equation}\label{eq:split_general}
+	x_{i+1} = Gx_i + f
+\end{equation}
+where:
+\begin{equation}
+	G = M^{-1}N, \quad f = M^{-1}b
+\end{equation}
+Now given \cref{eq:split_A_M-N} we can find:
+
+\begin{equation}
+	G = M^{-1}(M - A) = I - M^{-1}A
+\end{equation}
+Note that \cref{eq:split_general} is trying to solve:
+
+\begin{align}
+	(I - G)x &= f \\
+	(I - (I - M^{-1}A))x &= M^{-1}b \\
+	M^{-1}Ax = M^{-1}b
+\end{align}
+which is the same as \cref{eq:precond_left}. For the symmetric Gauss--Seidel $M$ is given by
+\begin{equation}\label{eq:SGS_precond}
+	M_{SGS} = (D + L)D^-1(D + U)
+\end{equation}
+where $L$ is the lower triangular part of $A$, $D$ is the diagonal of $A$, $U$ is the upper triangular part of $A$. Note also that $(D + L)$ is a lower triangular matrix, while $D^-1(D + U)$ is upper triangular.
+
+The main advantage of this preconditioner is that it does not need any additional memory to store $M_{SGS}$ nor does it require any steps to compute $M_{SGS}$.
+
+\subsection{Zero Fill-in Incomplete LU preconditioner}
+We start with an observation about $A=LU$. In general if $A$ is sparse there are no guarantees that $L$ and $U$ will be sparse too. Moreover the task of minimizing fill-in during Gaussian elimination belongs to the NP family of algorithms. Incomplete $LU$ factorizations are generated using Gaussian elimination, by discarding some of the elements, which would otherwise appear in the complete $LU$ factorization of $A$. It is important not to discard diagonal elements. The general form is given by $A = R + LU$.
+
+Incomplete $LU$ factorization with zero fill-is is one which satisfies:
+\begin{equation}\label{eq:ilu(0)}
+	A - LU = 0, \quad \forall{i, j} : a_{i,j} \neq 0
+\end{equation}
+
+Note two things. One $LU$ as defined by \cref{eq:ilu(0)} is not unique. Second \cref{eq:ilu(0)} does not say anything about the values of $a_{i,j} - lu_{i, j}$ when $a_{i,j} = 0$, they could be anything. We shall seek $L$ and $U$ which have the same zero pattern as $A$.
+
+\begin{align}
+	l_{i,j} &= \begin{cases}
+		 0 \iff a_{i,j} = 0, \quad i = 1, 2, \dots, n, j < i \\
+		 0, \quad i = 1, 2, \dots, n, j > i \\
+		 1, \quad i = j
+	\end{cases} \\
+	u_{i,j} &= \begin{cases}
+		 0 \iff a_{i,j} = 0, \quad i = 1, 2, \dots, n, j > i \\
+		 0, \quad i = 1, 2, \dots, n, j < i \\
+	\end{cases}
+\end{align}
+
+The ones at the main diagonal of $L$ do not need to be stored explicitly. If $A$ is sparse, $L$ and $U$ are also sparse. $L$ and $U$ have the same zero pattern as the lower and upper triangular parts of $A$. Thus we if are to represent the three matrices in CSR form, the three of them can share the $Pos$ and $Start$ arrays and there will be one $NZ$ array for $A$ and one $NZ$ array where nonzero elements will be stored for both $L$ and $U$.

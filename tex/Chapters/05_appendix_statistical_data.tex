@@ -1,0 +1,349 @@
+\chapter{Detailed stastical data of execution runtime}\label[appendix]{ch:stastical-data}
+Here we shall present extended stastical data gatherd over several runs of the CPU version of the application.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%% LAMINAR FLOW %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Laminar Flow}
+\subsection{Computer 1}
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 44.66s & 77.43s & 288.81s & 24.98s & 391.23s & 11.13s & 446.64s\\ \hline SD & 2.02s&3.62s&13.24s&1.03s&16.64s&0.29s&3.09s\\ \hline Median & 44.61s&77.13s&287.11s&25.10s&392.42s&11.05s&446.73s\\ \hline Min & 41.04s&70.91s&264.02s&22.98s&363.59s&10.90s&441.40s\\ \hline Max & 47.86s&84.15s&310.23s&26.83s&421.21s&11.86s&451.66s\\ \hline
+\end{tabular}
+\caption{Execution time on 2 threads of Computer 1 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 31.49s & 59.28s & 210.51s & 18.96s & 288.75s & 10.14s & 333.54s\\ \hline SD & 0.90s&2.00s&7.57s&0.87s&8.75s&0.48s&9.79s\\ \hline Median & 31.68s&58.60s&211.02s&18.69s&289.06s&9.82s&333.92s\\ \hline Min & 28.85s&57.04s&191.83s&18.22s&270.39s&9.78s&312.16s\\ \hline Max & 32.02s&62.27s&224.64s&21.04s&307.48s&10.85s&353.45s\\ \hline
+\end{tabular}
+\caption{Execution time on 3 threads of Computer 1 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 24.67s & 49.45s & 166.03s & 15.90s & 231.37s & 5.68s & 264.29s\\ \hline SD & 0.33s&1.91s&2.16s&0.50s&3.22s&0.26s&3.62s\\ \hline Median & 24.69s&48.69s&165.94s&15.74s&231.01s&5.50s&263.91s\\ \hline Min & 24.08s&48.03s&161.95s&15.53s&225.51s&5.48s&257.61s\\ \hline Max & 25.29s&53.87s&170.60s&17.35s&236.19s&6.01s&269.73s\\ \hline
+\end{tabular}
+\caption{Execution time on 4 threads of Computer 1 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 21.93s & 49.38s & 158.97s & 15.99s & 224.33s & 5.57s & 254.39s\\ \hline SD & 0.23s&1.79s&2.06s&0.66s&3.41s&0.16s&3.60s\\ \hline Median & 21.83s&48.58s&158.33s&15.60s&222.56s&5.51s&252.39s\\ \hline Min & 21.74s&48.28s&157.28s&15.49s&221.14s&5.50s&250.93s\\ \hline Max & 22.38s&53.28s&163.74s&17.25s&230.87s&6.01s&261.32s\\ \hline
+\end{tabular}
+\caption{Execution time on 5 threads of Computer 1 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 19.74s & 48.47s & 150.29s & 15.63s & 214.38s & 5.72s & 242.39s\\ \hline SD & 0.06s&1.09s&0.63s&0.44s&1.75s&0.26s&1.71s\\ \hline Median & 19.73s&47.93s&150.18s&15.44s&213.61s&5.57s&241.87s\\ \hline Min & 19.66s&47.64s&149.51s&15.37s&212.68s&5.50s&240.57s\\ \hline Max & 19.85s&51.05s&151.62s&16.81s&218.63s&6.11s&246.47s\\ \hline
+\end{tabular}
+\caption{Execution time on 6 threads of Computer 1 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 18.63s & 49.11s & 147.45s & 16.08s & 212.64s & 5.88s & 239.75s\\ \hline SD & 0.24s&1.41s&2.40s&0.76s&3.57s&0.37s&3.89s\\ \hline Median & 18.57s&48.08s&146.54s&15.80s&212.69s&5.72s&240.11s\\ \hline Min & 18.27s&47.66s&144.55s&15.49s&207.75s&5.49s&234.01s\\ \hline Max & 19.09s&50.88s&152.90s&18.14s&219.34s&6.36s&246.59s\\ \hline
+\end{tabular}
+\caption{Execution time on 7 threads of Computer 1 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 16.75s & 50.02s & 141.35s & 15.98s & 207.35s & 5.82s & 232.47s\\ \hline SD & 0.58s&2.63s&5.07s&0.53s&7.83s&0.22s&8.52s\\ \hline Median & 16.65s&49.34s&140.46s&15.94s&204.69s&5.77s&229.19s\\ \hline Min & 15.99s&47.90s&137.22s&15.37s&200.73s&5.50s&225.19s\\ \hline Max & 18.14s&56.16s&153.07s&17.22s&223.13s&6.27s&249.47s\\ \hline
+\end{tabular}
+\caption{Execution time on 8 threads of Computer 1 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+
+\subsection{Computer 2}
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 30.29s & 51.86s & 204.38s & 15.66s & 271.89s & 6.32s & 310.44s\\ \hline SD & 0.03s&0.06s&1.52s&0.02s&1.50s&0.02s&1.53s\\ \hline Median & 30.29s&51.85s&203.95s&15.65s&271.46s&6.32s&309.98s\\ \hline Min & 30.25s&51.72s&203.03s&15.63s&270.46s&6.28s&309.00s\\ \hline Max & 30.36s&51.96s&208.08s&15.69s&275.46s&6.35s&314.09s\\ \hline
+\end{tabular}
+\caption{Execution time on 2 threads of Computer 2 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 20.39s & 36.94s & 142.23s & 11.25s & 190.42s & 5.90s & 218.22s\\ \hline SD & 0.05s&0.08s&0.37s&0.02s&0.45s&0.04s&0.47s\\ \hline Median & 20.38s&36.93s&142.14s&11.25s&190.42s&5.90s&218.18s\\ \hline Min & 20.34s&36.85s&141.68s&11.21s&189.77s&5.83s&217.58s\\ \hline Max & 20.51s&37.11s&143.11s&11.29s&191.51s&5.97s&219.40s\\ \hline
+\end{tabular}
+\caption{Execution time on 3 threads of Computer 2 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 15.61s & 30.54s & 113.10s & 9.45s & 153.09s & 3.70s & 173.75s\\ \hline SD & 0.02s&0.06s&0.97s&0.06s&0.95s&0.03s&0.96s\\ \hline Median & 15.61s&30.53s&112.82s&9.43s&152.78s&3.71s&173.43s\\ \hline Min & 15.59s&30.48s&112.27s&9.38s&152.19s&3.64s&172.80s\\ \hline Max & 15.66s&30.66s&115.30s&9.62s&155.16s&3.74s&175.82s\\ \hline
+\end{tabular}
+\caption{Execution time on 4 threads of Computer 2 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 13.11s & 28.36s & 99.33s & 8.83s & 136.51s & 3.70s & 154.62s\\ \hline SD & 0.01s&0.20s&0.41s&0.05s&0.48s&0.02s&0.48s\\ \hline Median & 13.11s&28.30s&99.46s&8.82s&136.50s&3.70s&154.65s\\ \hline Min & 13.09s&28.15s&98.70s&8.77s&135.79s&3.68s&153.87s\\ \hline Max & 13.13s&28.92s&100.04s&8.97s&137.26s&3.74s&155.38s\\ \hline
+\end{tabular}
+\caption{Execution time on 5 threads of Computer 2 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 11.42s & 27.24s & 88.60s & 8.54s & 124.38s & 3.70s & 140.78s\\ \hline SD & 0.02s&0.06s&0.76s&0.02s&0.77s&0.01s&0.78s\\ \hline Median & 11.42s&27.25s&88.54s&8.54s&124.35s&3.69s&140.76s\\ \hline Min & 11.39s&27.14s&88.00s&8.49s&123.78s&3.68s&140.19s\\ \hline Max & 11.46s&27.34s&90.67s&8.56s&126.48s&3.72s&142.94s\\ \hline
+\end{tabular}
+\caption{Execution time on 6 threads of Computer 2 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 10.21s & 26.71s & 81.32s & 8.42s & 116.45s & 3.71s & 131.65s\\ \hline SD & 0.01s&0.16s&0.40s&0.07s&0.48s&0.03s&0.48s\\ \hline Median & 10.21s&26.67s&81.37s&8.38s&116.56s&3.71s&131.74s\\ \hline Min & 10.20s&26.51s&80.58s&8.33s&115.56s&3.67s&130.79s\\ \hline Max & 10.22s&27.14s&81.92s&8.52s&117.06s&3.78s&132.26s\\ \hline
+\end{tabular}
+\caption{Execution time on 7 threads of Computer 2 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 9.21s & 26.31s & 75.57s & 8.29s & 110.17s & 3.72s & 124.40s\\ \hline SD & 0.01s&0.21s&0.42s&0.03s&0.43s&0.02s&0.41s\\ \hline Median & 9.21s&26.26s&75.56s&8.27s&110.16s&3.72s&124.38s\\ \hline Min & 9.19s&26.04s&74.91s&8.24s&109.43s&3.70s&123.68s\\ \hline Max & 9.23s&26.70s&76.31s&8.33s&110.83s&3.78s&125.09s\\ \hline
+\end{tabular}
+\caption{Execution time on 8 threads of Computer 2 for solving for laminar flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%% TURBULENT FLOW %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Turbulent Flow}
+\subsection{Computer 1}
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 46.53s & 112.17s & 352.72s & 31.49s & 496.37s & 11.40s & 557.75s\\ \hline SD & 1.07s&3.76s&8.92s&1.12s&11.90s&0.58s&13.20s\\ \hline Median & 46.36s&112.05s&355.49s&31.12s&497.35s&11.07s&558.70s\\ \hline Min & 45.11s&106.98s&338.90s&30.05s&478.38s&10.93s&538.00s\\ \hline Max & 48.16s&120.76s&366.01s&32.95s&519.71s&12.59s&582.47s\\ \hline
+\end{tabular}
+\caption{Execution time on 2 threads of Computer 1 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 32.29s & 83.98s & 250.74s & 23.24s & 357.96s & 10.08s & 403.49s\\ \hline SD & 0.07s&2.70s&0.88s&0.78s&3.48s&0.44s&3.55s\\ \hline Median & 32.27s&82.39s&250.97s&22.83s&356.22s&9.81s&402.37s\\ \hline Min & 32.20s&81.76s&249.48s&22.64s&354.02s&9.77s&399.16s\\ \hline Max & 32.47s&88.78s&252.46s&24.82s&364.39s&10.86s&409.77s\\ \hline
+\end{tabular}
+\caption{Execution time on 3 threads of Computer 1 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 24.43s & 69.91s & 193.16s & 19.14s & 282.20s & 5.64s & 314.81s\\ \hline SD & 0.22s&2.98s&4.01s&0.13s&6.18s&0.24s&6.50s\\ \hline Median & 24.38s&68.61s&191.43s&19.11s&279.26s&5.51s&312.16s\\ \hline Min & 24.24s&68.36s&190.55s&19.04s&277.98s&5.48s&310.21s\\ \hline Max & 25.05s&76.42s&202.63s&19.49s&298.54s&6.02s&332.32s\\ \hline
+\end{tabular}
+\caption{Execution time on 4 threads of Computer 1 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 22.87s & 71.61s & 197.13s & 19.91s & 288.64s & 5.93s & 320.06s\\ \hline SD & 0.53s&3.41s&1.88s&0.74s&4.26s&0.21s&4.77s\\ \hline Median & 22.63s&70.52s&197.44s&19.74s&289.31s&6.02s&320.74s\\ \hline Min & 22.18s&68.10s&192.96s&19.20s&282.66s&5.51s&313.77s\\ \hline Max & 23.57s&77.05s&199.30s&21.33s&296.29s&6.04s&328.55s\\ \hline
+\end{tabular}
+\caption{Execution time on 5 threads of Computer 1 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 20.38s & 69.58s & 189.29s & 19.53s & 278.40s & 5.69s & 307.02s\\ \hline SD & 0.14s&2.06s&1.13s&0.43s&2.34s&0.25s&2.33s\\ \hline Median & 20.39s&68.71s&189.20s&19.34s&278.29s&5.58s&306.79s\\ \hline Min & 20.18s&67.54s&187.79s&19.03s&275.14s&5.50s&303.68s\\ \hline Max & 20.61s&72.81s&191.35s&20.38s&282.15s&6.09s&311.11s\\ \hline
+\end{tabular}
+\caption{Execution time on 6 threads of Computer 1 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 18.93s & 68.89s & 181.35s & 19.58s & 269.82s & 5.66s & 296.95s\\ \hline SD & 0.16s&1.71s&2.57s&0.50s&2.90s&0.10s&2.88s\\ \hline Median & 18.99s&68.01s&181.21s&19.34s&269.61s&5.71s&296.51s\\ \hline Min & 18.59s&67.71s&176.57s&19.08s&265.77s&5.50s&293.02s\\ \hline Max & 19.13s&71.94s&185.47s&20.54s&275.75s&5.77s&303.12s\\ \hline
+\end{tabular}
+\caption{Execution time on 7 threads of Computer 1 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 1}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 17.02s & 71.66s & 168.72s & 20.07s & 260.45s & 5.90s & 285.95s\\ \hline SD & 0.35s&3.13s&5.33s&0.79s&8.97s&0.16s&9.45s\\ \hline Median & 17.05s&72.12s&168.73s&20.17s&260.42s&5.89s&285.96s\\ \hline Min & 16.34s&66.87s&159.27s&18.83s&244.96s&5.70s&269.42s\\ \hline Max & 17.58s&77.57s&176.36s&21.31s&272.75s&6.19s&299.16s\\ \hline
+\end{tabular}
+\caption{Execution time on 8 threads of Computer 1 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+
+\subsection{Computer 2}
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 30.73s & 73.70s & 276.62s & 19.47s & 369.79s & 6.34s & 408.82s\\ \hline SD & 0.12s&0.35s&1.67s&0.12s&1.96s&0.03s&2.08s\\ \hline Median & 30.75s&73.79s&276.37s&19.44s&369.23s&6.34s&408.23s\\ \hline Min & 30.56s&73.30s&274.41s&19.31s&367.16s&6.31s&406.14s\\ \hline Max & 30.96s&74.44s&278.94s&19.69s&372.95s&6.39s&412.20s\\ \hline
+\end{tabular}
+\caption{Execution time on 2 threads of Computer 2 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 20.67s & 52.46s & 192.93s & 13.89s & 259.28s & 5.92s & 287.39s\\ \hline SD & 0.02s&0.37s&0.78s&0.01s&0.88s&0.03s&0.89s\\ \hline Median & 20.67s&52.37s&192.61s&13.89s&258.81s&5.93s&286.93s\\ \hline Min & 20.64s&52.27s&192.01s&13.86s&258.23s&5.88s&286.33s\\ \hline Max & 20.72s&53.57s&194.29s&13.91s&260.58s&5.96s&288.69s\\ \hline
+\end{tabular}
+\caption{Execution time on 3 threads of Computer 2 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 15.87s & 43.35s & 153.28s & 11.63s & 208.26s & 3.76s & 229.24s\\ \hline SD & 0.06s&0.19s&0.88s&0.08s&1.00s&0.11s&1.10s\\ \hline Median & 15.85s&43.29s&153.37s&11.60s&208.17s&3.73s&229.16s\\ \hline Min & 15.81s&43.21s&151.94s&11.58s&206.89s&3.70s&227.84s\\ \hline Max & 16.04s&43.91s&154.73s&11.84s&210.11s&4.10s&231.23s\\ \hline
+\end{tabular}
+\caption{Execution time on 4 threads of Computer 2 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 13.32s & 40.07s & 135.31s & 10.89s & 186.26s & 3.72s & 204.60s\\ \hline SD & 0.12s&0.46s&1.74s&0.15s&2.10s&0.05s&2.19s\\ \hline Median & 13.29s&39.96s&134.45s&10.84s&185.37s&3.71s&203.67s\\ \hline Min & 13.25s&39.73s&133.63s&10.82s&184.23s&3.65s&202.53s\\ \hline Max & 13.65s&41.40s&138.59s&11.33s&190.66s&3.82s&209.42s\\ \hline
+\end{tabular}
+\caption{Execution time on 5 threads of Computer 2 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 11.51s & 38.57s & 119.61s & 10.48s & 168.66s & 3.71s & 185.17s\\ \hline SD & 0.02s&0.30s&1.05s&0.05s&1.13s&0.03s&1.12s\\ \hline Median & 11.51s&38.47s&119.46s&10.47s&168.42s&3.70s&184.93s\\ \hline Min & 11.49s&38.29s&118.50s&10.42s&167.30s&3.69s&183.83s\\ \hline Max & 11.54s&39.24s&122.38s&10.62s&171.39s&3.78s&187.87s\\ \hline
+\end{tabular}
+\caption{Execution time on 6 threads of Computer 2 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 10.30s & 37.63s & 110.25s & 10.31s & 158.19s & 3.70s & 173.48s\\ \hline SD & 0.01s&0.10s&0.50s&0.06s&0.54s&0.02s&0.53s\\ \hline Median & 10.29s&37.60s&110.12s&10.31s&158.10s&3.70s&173.38s\\ \hline Min & 10.28s&37.50s&109.50s&10.22s&157.37s&3.66s&172.70s\\ \hline Max & 10.31s&37.77s&111.18s&10.48s&159.10s&3.73s&174.36s\\ \hline
+\end{tabular}
+\caption{Execution time on 7 threads of Computer 2 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}
+            
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{} & \multicolumn{7}{c|}{Computer 2}                                                                                                                                       
+\\ \cline{2-8}
+& Step 1 & Step 2 & Step 3 & Step 4 & \begin{tabular}[c]{@{}c@{}}CG \\ (Total)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Matrix\\ Assembling\end{tabular} & \begin{tabular}[c]{@{}c@{}}Total \\ Time\end{tabular} \\ \hline
+\begin{tabular}[c]{{@{{}}c@{{}}}}Mean \\ Time\end{tabular}  & 9.28s & 37.02s & 102.41s & 10.18s & 149.61s & 3.69s & 163.88s\\ \hline SD & 0.02s&0.14s&1.05s&0.07s&1.08s&0.02s&1.07s\\ \hline Median & 9.27s&37.04s&102.13s&10.17s&149.36s&3.69s&163.65s\\ \hline Min & 9.25s&36.75s&101.66s&10.09s&148.76s&3.67s&163.02s\\ \hline Max & 9.32s&37.18s&105.44s&10.36s&152.68s&3.73s&166.93s\\ \hline
+\end{tabular}
+\caption{Execution time on 8 threads of Computer 2 for solving for turbulent flow via \crefrange{eq:adv-diff-split-advect}{eq:adv-diff-split-velicity-mass} over the given mesh with $\Delta t = 0.01$ and Conjugate Gradient method used for solving the linear system.}
+\end{table}

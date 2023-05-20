@@ -1,0 +1,121 @@
+\documentclass[12pt]{report}
+\usepackage{hyperref}
+\setcounter{tocdepth}{4}
+\setcounter{secnumdepth}{3}
+\usepackage[backend=biber]{biblatex}
+\usepackage{amsmath,amssymb}
+\usepackage{systeme}
+\usepackage[capitalise]{cleveref}
+\usepackage{csquotes}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{cancel}
+\usepackage{breqn}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage{amsthm}
+\usepackage{multicol}
+\usepackage{listings}
+\usepackage{amssymb}
+\usepackage{pdfpages}
+%\usepackage{subfigure}
+\usepackage{multirow}
+\usepackage{multicol}
+\usepackage[toc,page]{appendix}\usepackage[abbreviations,symbols,style=index]{glossaries-extra}
+
+\newabbreviation{api}{API}{Application Programming Interface}
+\newabbreviation{cg}{CG}{Conjugate Gradient}
+\newabbreviation{cpu}{CPU}{Central Processing Unit}
+\newabbreviation{csr}{CSR}{Compressed Sparse Row}
+\newabbreviation{fem}{FEM}{Finite Element Method}
+\newabbreviation{fps}{FPS}{Frames Per Second}
+\newabbreviation{gpu}{GPU}{Graphics Processing Unit}
+\newabbreviation{ic0}{IC0}{Zero Fill-in Incomplete Cholesky}
+\newabbreviation{pcg}{PCG}{Predonditioned Conjugate Gradient}
+\newabbreviation{sm}{SM}{Streaming Multiprocessor}
+\newabbreviation{spd}{SPD}{Symmetric Positive Definite}
+\newabbreviation{tbb}{TBB}{Thread Building Blocks}
+\newabbreviation{vfx}{VFX}{Visual Effects}
+
+\addbibresource{main.bib}
+
+\lstset{
+  numbers=left,
+  stepnumber=5,    
+  firstnumber=1,
+  numberfirstline=true
+}
+
+\interfootnotelinepenalty=10000
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+
+\begin{document}
+
+\begin{titlepage}
+\begin{center}
+\begin{minipage}{0.45\textwidth}
+	\includegraphics[scale=0.2]{Figures/2_SU_bg_n.png}
+\end{minipage}
+\begin{minipage}{0.45\textwidth}
+	\footnotesize
+	Sofia University ``St. Kliment Ohridski'' Faculty of Mathematics and Informatics\\
+	\vfill
+	Department of Numerical Methods and Algorithms
+\end{minipage}
+
+\vspace{1.5cm}
+
+\textbf{\Large GPU implementation of the FEM for the Navier-Stokes equations}
+
+\vspace{1.5cm}
+\small
+\textsc{Master's thesis}\\
+\textsc{in Computational Mathematics and Mathematical Modelling}
+\vfill
+
+\textbf{Author:} Vasil D. Pashov, FN 25938\\
+\textbf{Supervisor:} Assist. Prof. Ph.D. Tihomir B. Ivanov\\
+\vfill
+November, 2021
+
+
+\end{center}
+\end{titlepage}
+
+
+\begin{abstract}
+Nowadays graphics processing units (GPUs) are capable of performing general purpose tasks. Some areas such as Artificial Intelligence, Cryptocurrencies have successfully taken advantage of the GPU hardware and programming model. The goal of this work is to construct a FEM based algorithm for solving the incompressible  Navier-Stokes equations, which is suitable, though not limited to, the purposes of computer graphics and the VFX industry.
+
+Three different approaches were researched and the pros and cons with respect to our goals, performance and suitability for GPU (and multi threaded CPU) implementation were discussed. Numerical experiments with a classical model problem (the 2D DFG Benchmark) were conducted in order to evaluate the applicability of the algorithms. The algorithm which completes our goals best splits the differential operator into three parts and each of the resulting equations is solved via a method which takes advantage of the GPU processing power.
+
+\end{abstract}
+\tableofcontents
+
+\printunsrtglossary[type=abbreviations]
+
+\newtheorem{definition}{Definition}[section]
+
+\newtheorem{proposition}{Proposition}[section]
+
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\newcommand{\dotprod}[2]{\left(#1, #2\right)}
+\newcommand{\divg}[1]{\nabla\cdot#1}
+\newcommand{\grad}[1]{\nabla#1}
+\newcommand{\lapl}[1]{\Delta#1}
+\newcommand{\vecf}[1]{\mathbf{#1}}
+
+\input{Chapters/00_chapter_introduction}
+\input{Chapters/01_chapter_FEM}
+\input{Chapters/04_implementation_details}
+\begin{appendices}
+\input{Chapters/05_appendix_statistical_data}
+\input{Chapters/06_appendix_grid_sync}
+%\input{Chapters/08_appendix_sparse_mat}
+\end{appendices}
+\printbibliography
+\end{document}
